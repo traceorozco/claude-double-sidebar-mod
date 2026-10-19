@@ -1,0 +1,449 @@
+// Claude Double Sidebar, drawn inside Claude's own sidebar: a rail of the Code tab's sections (Claude's
+// custom groups) down the sidebar's left edge, and the sidebar showing only the chosen section.
+// Home shows Claude's sidebar as it is. Runs in the claude.ai page; touches nothing but the DOM.
+//
+// A section's icon is part of its name: a private-use character from the Claude sidebar icons font
+// (github.com/traceorozco/claude-sidebar-icons), drawn by the fonts installed alongside, so Claude's own
+// sidebar shows it too. Picking an icon writes that character at the front of the name being edited.
+
+const KEY_LANE = 'doubleSidebar.lane'
+const RAIL_W = 48
+const ICON_FONT = '"Segoe UI Symbol"'
+
+// [name, character, category] for every icon in the font, filled in from icons.tsv when the patch is built
+const ICON_TABLE = __ICON_TABLE__
+const ICON_BY_NAME = Object.fromEntries(ICON_TABLE.map(([name, ch]) => [name, ch]))
+const FOLDER = ICON_BY_NAME.folder
+const HOME = ICON_BY_NAME.home
+
+// Lucide line icons (ISC license) for the controls that aren't sections
+const UI = {
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  palette: '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
+}
+const svg = name => `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${UI[name]}</svg>`
+const glyph = ch => { const s = document.createElement('span'); s.setAttribute('data-ds-glyph', ''); s.setAttribute('aria-hidden', 'true'); s.textContent = ch; return s }
+
+// "<icon> name" → { icon, text }; icon is null when the name has none
+const LEAD = /^([\u{F0000}-\u{FFFFD}])\s*/u
+const splitName = name => { const m = LEAD.exec(name); return m ? { icon: m[1], text: name.slice(m[0].length) } : { icon: null, text: name } }
+
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} }
+
+const STYLE = `
+aside.dframe-sidebar[data-ds] > .dframe-sidebar-body { margin-inline-start: ${RAIL_W}px; }
+/* one rule under the header, across the rail and the sidebar */
+aside.dframe-sidebar[data-ds] > .df-titlebar { box-shadow: inset 0 -1px 0 var(--ds-line); }
+aside.dframe-sidebar[data-ds] { --ds-line: rgb(0 0 0 / .08); --ds-rail: rgb(0 0 0 / .028); --ds-hover: rgb(0 0 0 / .05); --ds-on: rgb(0 0 0 / .085);
+  --ds-menu: #fff; --ds-menu-ink: #3d3d3a; --ds-menu-line: #d7d7d5; --ds-tip: #1f1e1d; --ds-tip-ink: #fff; }
+[data-mode="dark"] > aside.dframe-sidebar[data-ds], aside.dframe-sidebar[data-ds][data-mode="dark"] { --ds-line: rgb(255 255 255 / .08); --ds-rail: rgb(0 0 0 / .2);
+  --ds-hover: rgb(255 255 255 / .06); --ds-on: rgb(255 255 255 / .1); --ds-menu: #30302e; --ds-menu-ink: #e8e6dc; --ds-menu-line: rgb(255 255 255 / .1);
+  --ds-tip: #f5f4ee; --ds-tip-ink: #1f1e1d; }
+/* each glyph carries 0.28em of blank space after its drawing: shifted by half of it, the drawing sits centred */
+[data-ds-glyph] { display: inline-block; font-family: ${ICON_FONT}; font-style: normal; font-weight: 400; line-height: 1; transform: translateX(0.14em); }
+[data-ds-rail] { box-sizing: border-box; position: absolute; inset-inline-start: 0; top: 46px; bottom: 0; width: ${RAIL_W}px; background: var(--ds-rail);
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0;
+  border-inline-end: 1px solid var(--ds-line); overflow-y: auto; scrollbar-width: none; }
+[data-ds-rail] button { all: unset; box-sizing: border-box; flex: none; width: 32px; height: 32px; border-radius: 8px;
+  display: grid; place-items: center; cursor: default; color: color-mix(in srgb, currentColor 72%, transparent); font-size: 17px; }
+[data-ds-rail] button svg { width: 15px; height: 15px; }
+[data-ds-rail] button:hover { background: var(--ds-hover); color: currentColor; }
+[data-ds-rail] button[aria-pressed="true"] { background: var(--ds-on); color: currentColor; }
+[data-ds-rail] button:focus-visible { outline: 2px solid color-mix(in srgb, currentColor 40%, transparent); outline-offset: 1px; }
+[data-ds-rail] hr { all: unset; flex: none; width: 24px; border-top: 1px solid var(--ds-line); margin: 2px 0; }
+aside.dframe-sidebar[data-ds-lane]:not([data-ds-lane="home"]) [data-testid="nav-pin-rows"],
+aside.dframe-sidebar[data-ds-lane]:not([data-ds-lane="home"]) [data-pinned-list] { display: none !important; }
+/* Recents is the list that stretches the sidebar to the window's foot: kept in place, emptied */
+aside.dframe-sidebar[data-ds-lane]:not([data-ds-lane="home"]) [data-recents-list] > * { display: none !important; }
+[data-ds-tip] { position: fixed; z-index: 2147483001; pointer-events: none; padding: 4px 8px; border-radius: 6px;
+  background: var(--ds-tip, #1f1e1d); color: var(--ds-tip-ink, #fff); font-family: inherit; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; }
+[data-ds-menu] { position: fixed; z-index: 2147483000; min-width: 180px; padding: 4px; border-radius: 11px; font-family: inherit; font-size: 14px;
+  background: var(--ds-menu); color: var(--ds-menu-ink); border: 1px solid var(--ds-menu-line); box-shadow: 0 5px 14px rgb(0 0 0 / .09); }
+[data-ds-menu] > button { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 7px; cursor: default; }
+[data-ds-menu] > button:hover, [data-ds-menu] > button:focus-visible { background: var(--ds-hover); }
+[data-ds-menu] > button svg { width: 16px; height: 16px; flex: none; }
+[data-ds-menu][data-picker] { width: 312px; min-width: 0; padding: 0; display: flex; flex-direction: column; max-height: min(380px, calc(100vh - 16px)); overflow: hidden; }
+[data-ds-picker] { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+[data-ds-picker] > label { flex: none; display: flex; align-items: center; gap: 6px; margin: 8px 8px 4px; padding: 0 8px; height: 32px; border-radius: 8px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent); color: color-mix(in srgb, currentColor 60%, transparent); }
+[data-ds-picker] > label:focus-within { border-color: color-mix(in srgb, currentColor 40%, transparent); }
+[data-ds-picker] > label svg { width: 15px; height: 15px; flex: none; }
+[data-ds-picker] > label input { all: unset; flex: 1; min-width: 0; font-size: 13px; color: var(--ds-menu-ink, currentColor); }
+[data-ds-picker] > label input::placeholder { color: color-mix(in srgb, currentColor 50%, transparent); }
+[data-ds-grid] { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); justify-items: center; gap: 2px; padding: 4px 8px 8px; overflow-y: auto; min-height: 0; flex: 1; align-content: start; }
+[data-ds-grid] > button { all: unset; box-sizing: border-box; width: 34px; height: 34px; border-radius: 7px;
+  display: grid; place-items: center; font-size: 19px; cursor: default; border: 1px solid transparent; }
+[data-ds-grid] > button:hover, [data-ds-grid] > button:focus-visible { background: color-mix(in srgb, currentColor 7%, transparent); }
+[data-ds-grid] > button[aria-pressed="true"] { background: color-mix(in srgb, currentColor 9%, transparent); border-color: color-mix(in srgb, currentColor 30%, transparent); }
+[data-ds-grid] > button[hidden] { display: none; }
+[data-ds-grid] > p { grid-column: 1 / -1; margin: 8px 2px; font-size: 13px; color: color-mix(in srgb, currentColor 55%, transparent); }
+button[data-ds-edit] { all: unset; display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; margin-inline-end: 4px; border-radius: 6px;
+  cursor: default; font-size: 15px; box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent); }
+button[data-ds-edit]:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+button[data-ds-edit] svg { width: 14px; height: 14px; }
+[data-ds-iconpick] { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+[data-ds-iconpick] > span { font-size: 13px; color: color-mix(in srgb, currentColor 65%, transparent); }
+[data-ds-iconpick] [data-ds-picker] > label { margin: 0 0 4px; }
+[data-ds-iconpick] [data-ds-grid] { grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); max-height: 200px; padding: 0; }
+`
+
+// Claude's custom groups, in sidebar order: { id, name, icon, text }
+function sections() {
+  return [...document.querySelectorAll('aside.dframe-sidebar [data-group-list][data-group-section^="custom-"]')]
+    .map(l => { const name = l.getAttribute('data-group-label') || 'Section'; return { id: l.getAttribute('data-group-list'), name, ...splitName(name) } })
+}
+const groupEl = id => document.querySelector(`aside.dframe-sidebar [data-group-list="${CSS.escape(id)}"]`)
+
+function applyLane(aside, lane) {
+  aside.setAttribute('data-ds-lane', lane)
+  let style = document.getElementById('ds-lane-style')
+  if (!style) { style = document.createElement('style'); style.id = 'ds-lane-style'; document.head.append(style) }
+  style.textContent = lane === 'home' ? '' :
+    `aside.dframe-sidebar [data-group-list]:not([data-group-list="${CSS.escape(lane)}"]):not([data-recents-list]) { display: none !important; }`
+  if (lane !== 'home') {
+    // the chosen section opens if Claude has it collapsed
+    groupEl(lane)?.querySelector('[data-group-toggle][aria-expanded="false"]')?.click()
+  }
+}
+
+// --- tooltip: a name as Claude's tooltips look, beside the control (the rail) or centred above it (a
+// picker's icons); inside a dialog when the control is in one, so it stacks over the dialog
+let tip, tipTimer
+function showTip(anchor, text, place = 'right') {
+  clearTimeout(tipTimer)
+  tipTimer = setTimeout(() => {
+    tip ??= Object.assign(document.createElement('div'), { role: 'tooltip' })
+    tip.setAttribute('data-ds-tip', '')
+    tip.textContent = text
+    ;(anchor.closest('[role="dialog"]') || document.querySelector('aside.dframe-sidebar') || document.body).append(tip)
+    const r = anchor.getBoundingClientRect()
+    if (place === 'top') {
+      tip.style.left = `${Math.max(4, Math.min(r.left + r.width / 2 - tip.offsetWidth / 2, innerWidth - tip.offsetWidth - 4))}px`
+      tip.style.top = `${r.top - tip.offsetHeight - 6}px`
+    } else {
+      tip.style.left = `${r.right + 8}px`
+      tip.style.top = `${r.top + r.height / 2 - tip.offsetHeight / 2}px`
+    }
+  }, 250)
+}
+function hideTip() { clearTimeout(tipTimer); tip?.remove() }
+
+// --- menus
+function closeMenus() { hideTip(); document.querySelectorAll('[data-ds-menu]').forEach(m => m.remove()) }
+function popMenu(anchor, fill, { picker = false, keepFocus = false } = {}) {
+  closeMenus(); hideTip()
+  const m = document.createElement('div')
+  m.setAttribute('data-ds-menu', '')
+  m.setAttribute('role', 'menu')
+  if (picker) m.setAttribute('data-picker', '')
+  fill(m)
+  // inside the aside so Claude's theme variables reach it
+  ;(document.querySelector('aside.dframe-sidebar') || document.body).append(m)
+  const r = anchor.getBoundingClientRect()
+  m.style.left = `${Math.min(r.right + 6, innerWidth - m.offsetWidth - 8)}px`
+  m.style.top = `${Math.max(8, Math.min(r.top, innerHeight - m.offsetHeight - 8))}px`
+  const close = e => {
+    if (e.type === 'keydown' && e.key !== 'Escape') return
+    if (e.type === 'pointerdown' && m.contains(e.target)) return
+    m.remove(); removeEventListener('pointerdown', close, true); removeEventListener('keydown', close, true)
+  }
+  setTimeout(() => { addEventListener('pointerdown', close, true); addEventListener('keydown', close, true) })
+  if (keepFocus) m.onpointerdown = e => e.preventDefault()
+  else (m.querySelector('input') || m.querySelector('button'))?.focus()
+  return m
+}
+function item(m, label, icon, run) {
+  const b = document.createElement('button')
+  b.setAttribute('role', 'menuitem')
+  b.innerHTML = svg(icon) + '<span></span>'
+  b.lastChild.textContent = label
+  b.onclick = () => { closeMenus(); run() }
+  m.append(b)
+}
+
+// the icon picker: a search over name and category, and every icon as a button in a scrolling grid
+function makePicker(current, onPick) {
+  const wrap = document.createElement('div')
+  wrap.setAttribute('data-ds-picker', '')
+  const label = document.createElement('label')
+  label.innerHTML = svg('search')
+  const search = document.createElement('input')
+  search.type = 'text'
+  search.placeholder = 'Search icons'
+  search.setAttribute('aria-label', 'Search icons')
+  label.append(search)
+  const grid = document.createElement('div')
+  grid.setAttribute('data-ds-grid', '')
+  grid.setAttribute('role', 'radiogroup')
+  grid.setAttribute('aria-label', 'Icons')
+  const none = document.createElement('p')
+  none.textContent = 'No icons match'
+  none.hidden = true
+  for (const [name, ch, key] of ICON_TABLE) {
+    const c = document.createElement('button')
+    c.type = 'button'
+    c.onpointerenter = () => showTip(c, name, 'top')
+    c.onpointerleave = hideTip
+    c.onfocus = () => showTip(c, name, 'top')
+    c.onblur = hideTip
+    c.dataset.find = `${name} ${key}`.toLowerCase()
+    c.setAttribute('role', 'radio')
+    c.setAttribute('aria-label', name)
+    c.setAttribute('aria-pressed', String(current === ch))
+    c.append(glyph(ch))
+    c.onclick = e => {
+      e.preventDefault()
+      hideTip()
+      grid.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === c)))
+      onPick(ch)
+    }
+    grid.append(c)
+  }
+  grid.append(none)
+  search.oninput = () => {
+    const q = search.value.trim().toLowerCase()
+    let shown = 0
+    for (const c of grid.querySelectorAll('button')) { c.hidden = !!q && !c.dataset.find.includes(q); if (!c.hidden) shown++ }
+    none.hidden = shown > 0
+    grid.scrollTop = 0
+  }
+  // Enter in the search picks the first match
+  search.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); grid.querySelector('button:not([hidden])')?.click() } }
+  wrap.append(label, grid)
+  // keep the selected icon in view
+  requestAnimationFrame(() => grid.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest' }))
+  return wrap
+}
+
+// write the icon at the front of the name in a field Claude owns (React-controlled: set, then announce)
+function setFieldIcon(field, ch, text) {
+  const value = field.isContentEditable ? field.textContent : field.value
+  const next = `${ch} ${text ?? splitName(value).text}`
+  if (field.isContentEditable) field.textContent = next
+  else Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(field, next)
+  field.dispatchEvent(new Event('input', { bubbles: true }))
+  field.focus()
+}
+const fieldIcon = field => splitName(field.isContentEditable ? field.textContent : field.value).icon
+
+// Claude's own section menu, the one a right-click on a section header opens
+function claudeSectionMenu(id) {
+  const label = groupEl(id)?.querySelector('[data-sidebar-group-label]')
+  if (!label) return false
+  const r = label.getBoundingClientRect()
+  label.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: r.left + 24, clientY: r.top + r.height / 2 }))
+  return true
+}
+const waitFor = (find, ms = 1500) => new Promise(resolve => {
+  const t0 = Date.now()
+  const step = () => { const v = find(); if (v || Date.now() - t0 > ms) resolve(v); else requestAnimationFrame(step) }
+  step()
+})
+const menuItem = re => [...document.querySelectorAll('[role="menuitem"]')].find(e => re.test(e.textContent.trim()))
+
+// New section is in that menu: open it from any section, then press it; Claude's dialog takes the name
+async function newSection() {
+  const first = sections()[0]
+  if (!first || !claudeSectionMenu(first.id)) return
+  ;(await waitFor(() => menuItem(/^New section$/)))?.click()
+}
+// A section's name, rewritten through Claude's own Rename: the field it opens takes the new name, then Enter
+const renameField = id => groupEl(id)?.querySelector('[data-sidebar-group-label] input, [data-sidebar-group-label] [contenteditable="true"]')
+async function renameTo(id, name) {
+  let field = renameField(id)
+  if (!field) {
+    if (!claudeSectionMenu(id)) return
+    ;(await waitFor(() => menuItem(/^Rename/)))?.click()
+    field = await waitFor(() => renameField(id))
+    if (!field) return
+  }
+  const { icon, text } = splitName(name)
+  setFieldIcon(field, icon, text)
+  for (const type of ['keydown', 'keyup']) field.dispatchEvent(new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }))
+}
+// Change icon from the rail: the picker beside the rail button, the pick saved straight into the name
+function changeIcon(id, anchor) {
+  const s = sections().find(x => x.id === id)
+  if (!s) return
+  popMenu(anchor, m => m.append(makePicker(s.icon, ch => { closeMenus(); renameTo(id, `${ch} ${s.text}`) })), { picker: true })
+}
+
+// Claude's New section dialog: an icon row under the name
+function decorateSectionDialog() {
+  for (const dlg of document.querySelectorAll('[role="dialog"]')) {
+    if (dlg.querySelector('[data-ds-iconpick]')) continue
+    const input = dlg.querySelector('input[placeholder="Section name"]')
+    if (!input) continue
+    const submit = [...dlg.querySelectorAll('button')].find(b => /^Create section/.test(b.textContent.trim()))
+    let row = input
+    while (row.parentElement && row.parentElement !== dlg && !(submit && row.parentElement.contains(submit))) row = row.parentElement
+    const box = document.createElement('div')
+    box.setAttribute('data-ds-iconpick', '')
+    box.innerHTML = '<span>Icon</span><div></div>'
+    box.lastChild.replaceWith(makePicker(fieldIcon(input), ch => setFieldIcon(input, ch)))
+    row.after(box)
+  }
+}
+
+// While Claude renames a section in place, an icon button sits in front of the name field and opens the
+// picker without taking the field's focus, so the rename carries on and Enter saves name and icon together
+function decorateRename() {
+  for (const s of sections()) {
+    const label = groupEl(s.id)?.querySelector('[data-sidebar-group-label]')
+    if (!label) continue
+    const field = label.querySelector('input, [contenteditable="true"]')
+    const marks = label.querySelectorAll('button[data-ds-edit]')
+    if (!field) { marks.forEach(m => m.remove()); continue }
+    let host = field
+    while (host.parentElement && host.parentElement !== label) host = host.parentElement
+    let mark = host.previousElementSibling?.matches?.('button[data-ds-edit]') ? host.previousElementSibling : null
+    for (const m of marks) if (m !== mark) m.remove()
+    const ch = fieldIcon(field) || FOLDER
+    if (!mark) {
+      mark = document.createElement('button')
+      mark.type = 'button'
+      mark.setAttribute('data-ds-edit', '')
+      mark.setAttribute('aria-label', 'Section icon')
+      mark.onpointerdown = e => e.preventDefault()
+      mark.onclick = e => {
+        e.preventDefault(); e.stopPropagation()
+        // the name as typed so far: the search takes the focus, and Claude may end the rename when the field loses it
+        const typed = splitName(field.isContentEditable ? field.textContent : field.value).text || s.text
+        popMenu(mark, m => m.append(makePicker(fieldIcon(field), picked => {
+          closeMenus()
+          const live = renameField(s.id)
+          if (live) setFieldIcon(live, picked, typed)
+          else renameTo(s.id, `${picked} ${typed}`)
+        })), { picker: true })
+      }
+      host.before(mark)
+    }
+    if (mark.textContent !== ch) mark.replaceChildren(glyph(ch))
+  }
+}
+
+// Sessions take an icon the same way: while a session is renamed (its row in the sidebar, or its title
+// above the conversation), an icon button sits in front of the field. If the field closes while the
+// picker is open, the pick goes in through Claude's Rename again, with the name as it was typed.
+const paneTitle = () => document.querySelector('button[data-pane-title]')
+function sessionFields() {
+  const fields = [...document.querySelectorAll('aside [data-row-key]:not([data-row-key^="label:"]) input, aside [data-row-key]:not([data-row-key^="label:"]) [contenteditable="true"]')]
+    .map(f => ({ field: f, key: f.closest('[data-row-key]').getAttribute('data-row-key') }))
+  // the title above the conversation: Claude swaps its button for a field in the same place
+  const header = document.querySelector('[data-pane-title-input], input[aria-label*="session" i]:not(aside input)')
+  if (header && !fields.some(x => x.field === header)) fields.push({ field: header, key: 'pane' })
+  return fields
+}
+async function renameSession(key, name) {
+  const find = () => key === 'pane'
+    ? document.querySelector('[data-pane-title-input], input[aria-label*="session" i]:not(aside input)')
+    : document.querySelector(`aside [data-row-key="${CSS.escape(key)}"] input, aside [data-row-key="${CSS.escape(key)}"] [contenteditable="true"]`)
+  let field = find()
+  if (!field) {
+    if (key === 'pane') paneTitle()?.click()
+    else {
+      document.querySelector(`aside [data-row-key="${CSS.escape(key)}"] button[aria-label^="More options for"]`)?.click()
+      ;(await waitFor(() => menuItem(/^Rename/)))?.click()
+    }
+    field = await waitFor(find)
+    if (!field) return
+  }
+  const { icon, text } = splitName(name)
+  setFieldIcon(field, icon, text)
+  for (const type of ['keydown', 'keyup']) field.dispatchEvent(new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }))
+}
+function decorateSessionRename() {
+  const live = sessionFields()
+  for (const m of document.querySelectorAll('button[data-ds-edit][data-session]')) if (!live.some(x => x.field === m.nextElementSibling)) m.remove()
+  for (const { field, key } of live) {
+    let mark = field.previousElementSibling?.matches?.('button[data-ds-edit]') ? field.previousElementSibling : null
+    const ch = fieldIcon(field) || '\u{F0000}'
+    if (!mark) {
+      mark = document.createElement('button')
+      mark.type = 'button'
+      mark.setAttribute('data-ds-edit', '')
+      mark.setAttribute('data-session', '')
+      mark.setAttribute('aria-label', 'Session icon')
+      mark.onpointerdown = e => e.preventDefault()
+      mark.onclick = e => {
+        e.preventDefault(); e.stopPropagation()
+        const typed = splitName(field.isContentEditable ? field.textContent : field.value).text
+        popMenu(mark, m => m.append(makePicker(fieldIcon(field), picked => {
+          closeMenus()
+          if (field.isConnected) setFieldIcon(field, picked, typed)
+          else renameSession(key, `${picked} ${typed}`)
+        })), { picker: true })
+      }
+      field.before(mark)
+    }
+    const shown = fieldIcon(field)
+    if (mark.dataset.icon !== (shown || '')) { mark.dataset.icon = shown || ''; mark.replaceChildren(shown ? glyph(shown) : Object.assign(document.createElement('span'), { innerHTML: svg('palette') })) }
+  }
+}
+
+function render(aside) {
+  let rail = aside.querySelector(':scope > [data-ds-rail]')
+  if (!rail) { rail = document.createElement('nav'); rail.setAttribute('data-ds-rail', ''); rail.setAttribute('aria-label', 'Sections'); aside.append(rail) }
+  aside.setAttribute('data-ds', '')
+  const list = sections()
+  let lane = load(KEY_LANE, 'home')
+  if (lane !== 'home' && !list.some(s => s.id === lane)) lane = 'home'
+  const sig = JSON.stringify([lane, list])
+  if (rail.dataset.sig === sig) return
+  rail.dataset.sig = sig
+  rail.replaceChildren()
+  const button = (label, content, onClick) => {
+    const b = document.createElement('button')
+    b.setAttribute('aria-label', label)
+    if (typeof content === 'string') b.innerHTML = svg(content)
+    else b.append(content)
+    b.onclick = onClick
+    b.onpointerenter = () => showTip(b, label)
+    b.onpointerleave = hideTip
+    b.onfocus = () => showTip(b, label)
+    b.onblur = hideTip
+    rail.append(b)
+    return b
+  }
+  const lanePress = id => () => { hideTip(); save(KEY_LANE, id); render(aside) }
+  button('Home', glyph(HOME), lanePress('home')).setAttribute('aria-pressed', String(lane === 'home'))
+  rail.append(document.createElement('hr'))
+  for (const s of list) {
+    const b = button(s.text, glyph(s.icon || FOLDER), lanePress(s.id))
+    b.setAttribute('aria-pressed', String(lane === s.id))
+    b.oncontextmenu = e => {
+      e.preventDefault()
+      popMenu(b, m => {
+        item(m, 'New session', 'plus', () => groupEl(s.id)?.querySelector('button[aria-label^="New session"]')?.click())
+        item(m, 'Change icon…', 'palette', () => changeIcon(s.id, b))
+        item(m, 'Section options…', 'more', () => claudeSectionMenu(s.id))
+      })
+    }
+  }
+  if (list.length) button('New section', 'plus', newSection)
+  applyLane(aside, lane)
+}
+
+function start() {
+  let style = document.getElementById('ds-style')
+  if (!style) { style = document.createElement('style'); style.id = 'ds-style'; document.head.append(style) }
+  style.textContent = STYLE
+  let queued = false
+  const tick = () => {
+    queued = false
+    const aside = document.querySelector('aside.dframe-sidebar')
+    if (aside) render(aside)
+    decorateSectionDialog()
+    decorateRename()
+    decorateSessionRename()
+  }
+  new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(tick) } })
+    .observe(document.documentElement, { childList: true, subtree: true, characterData: true })
+  tick()
+}
+
+if (document.readyState === 'loading') addEventListener('DOMContentLoaded', start, { once: true })
+else start()
