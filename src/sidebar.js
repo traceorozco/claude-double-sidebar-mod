@@ -68,7 +68,7 @@ aside.dframe-sidebar[data-ds] > .dframe-sidebar-body .df-bottom-tray { margin-in
 [data-ds-rail] button:hover .df-new-circle { color: var(--cds-text-primary, currentColor); }
 [data-ds-rail] .df-new-circle svg { width: 13px; height: 13px; stroke-width: 2.2; }
 /* sections are categories: their names in capitals, a pixel smaller than Claude's group labels */
-aside.dframe-sidebar :is([data-group-section^="custom-"], [data-pinned-list]) [data-sidebar-group-label] [data-group-name] { text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
+aside.dframe-sidebar :is([data-group-section^="custom-"], [data-pinned-list], [data-recents-list]) [data-sidebar-group-label] [data-group-name] { text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
 [data-ds-tip][data-caps] { text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
 [data-ds-rail] button:hover { background: var(--ds-hover); color: currentColor; }
 [data-ds-rail] button[aria-pressed="true"] { background: var(--ds-on); color: currentColor; }
