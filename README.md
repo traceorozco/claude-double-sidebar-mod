@@ -1,6 +1,8 @@
-# Claude Native Sidebar
+# Claude Double Sidebar mod
 
 **Unofficial.** Not made by or affiliated with Anthropic.
+
+The mod version of the [Claude Double Sidebar plugin](https://github.com/traceorozco/claude-double-sidebar-plugin). The plugin draws its sidebar in a separate app on top of Claude. This mod builds it into Claude itself.
 
 A double sidebar for the Code tab in Claude for Desktop on macOS, drawn inside Claude's own sidebar:
 
@@ -30,8 +32,8 @@ Needs macOS, [Node.js](https://nodejs.org) 18 or newer, and Apple's command line
 Run it from Terminal, not from inside Claude, because it quits Claude while it patches:
 
 ```bash
-git clone https://github.com/traceorozco/claude-native-sidebar.git
-cd claude-native-sidebar
+git clone https://github.com/traceorozco/claude-double-sidebar-mod.git
+cd claude-double-sidebar-mod
 ./install.sh
 ```
 
@@ -46,7 +48,7 @@ The first time, macOS may ask:
 A new Claude replaces the patched one, so the sidebar disappears. Run the installer again:
 
 ```bash
-cd claude-native-sidebar
+cd claude-double-sidebar-mod
 git pull
 ./install.sh
 ```

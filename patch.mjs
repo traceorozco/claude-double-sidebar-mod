@@ -78,7 +78,7 @@ function writeAsar(buf, header, dataStart, replace) {
 }
 
 const CERT = 'Claude Local'
-const SAVED = join(homedir(), 'Library/Application Support/claude-native-sidebar')
+const SAVED = join(homedir(), 'Library/Application Support/claude-double-sidebar-mod')
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], ...opts }).toString()
 
 // A self-signed code-signing certificate in the login keychain, made once. Signing with the same
@@ -113,7 +113,7 @@ function resign() {
   mkdirSync(SAVED, { recursive: true })
   const profile = join(APP, 'Contents/embedded.provisionprofile')
   if (existsSync(profile)) renameSync(profile, join(SAVED, 'embedded.provisionprofile'))
-  const ents = join(tmpdir(), `claude-native-sidebar-${process.pid}.plist`)
+  const ents = join(tmpdir(), `claude-double-sidebar-mod-${process.pid}.plist`)
   writeFileSync(ents, run('codesign', ['-d', '--entitlements', '-', '--xml', APP]))
   for (const k of ['com.apple.application-identifier', 'com.apple.developer.team-identifier',
     'com.apple.developer.associated-domains', 'keychain-access-groups']) {
