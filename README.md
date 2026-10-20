@@ -17,7 +17,7 @@ Made by <a href="https://github.com/traceorozco">Trace Orozco</a>
 
 ![Claude with the double sidebar: a rail of section icons beside Claude's own sidebar](docs/screenshots/sidebar-open.webp)
 
-A double sidebar for the Code tab in Claude for Desktop on macOS, drawn inside Claude's own sidebar:
+A double sidebar for the Claude desktop app on macOS, in Chat, Cowork and Code, drawn inside Claude's own sidebar:
 
 - A rail down the sidebar's left edge with Home and one icon per section. Hover an icon for the section's name.
 - Click a section and the sidebar shows only that section's sessions. Home shows everything.
