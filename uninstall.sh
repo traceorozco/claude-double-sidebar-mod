@@ -42,6 +42,8 @@ if pgrep -xq Claude; then
   pgrep -xq Claude && { echo "Claude is still open. Quit it and run this again."; exit 1; }
 fi
 
+# the agent first, so it doesn't patch Claude again straight after
+node agent.mjs --remove
 node patch.mjs --restore || { open -a "$APP"; exit 1; }
 rm -rf "$HOME/Library/Application Support/ClaudeDoubleSidebar"
 if $FONTS; then

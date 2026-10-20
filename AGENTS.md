@@ -7,12 +7,13 @@ You've been asked to install Claude Double Sidebar mod, an unofficial modificati
 Run `./install.sh --plan`. It lists every change for this Mac and changes nothing. In short:
 
 - **Every install** writes the sidebar to `~/Library/Application Support/ClaudeDoubleSidebar/sidebar.js` and copies four icon fonts (`CCSidebarIcons*.ttf`) to `~/Library/Fonts`. The fonts carry the family names Segoe UI Symbol, Segoe UI, Roboto and Consolas, which Claude's sidebar asks for and macOS lacks. That is how the icons appear in Claude.
+- **Every install** also sets up a background agent, `~/Library/LaunchAgents/local.claude-double-sidebar.plist`, unless run with `--no-agent`. launchd runs `agent.mjs` from the cloned folder every minute and when Claude's `Info.plist` changes. After a Claude update it patches Claude again the next time Claude is closed, and posts a macOS notification. It leaves a Claude it doesn't recognise alone, and handles each Claude build once.
 - **The first install, and the first after each Claude update**, also patches `/Applications/Claude.app`. It makes every change below to a copy of Claude.app beside it, signs and checks the copy, then swaps it in. If any step fails, Claude is left as it was:
   - saves the original `Contents/Resources/app.asar` as `app.asar.original`
   - adds a loader to the top of `.vite/build/index.js` inside `app.asar`. On each claude.ai page load it reads the sidebar file and runs it in that page
   - updates the `app.asar` fingerprint in `Contents/Info.plist`
   - moves `Contents/embedded.provisionprofile` aside and drops Anthropic-only entitlements
-  - creates a self-signed code-signing certificate named "Claude Local" in the login keychain if there isn't one, and re-signs Claude with it
+  - creates a self-signed code-signing certificate named "Claude Local" in the login keychain if there isn't one, and re-signs Claude with it. The signature's designated requirement accepts either that certificate or Anthropic's Developer ID (team Q6L2SF6YDW), so Claude's own updater can still install Anthropic's updates
 
 It makes no network requests and sends nothing anywhere. It changes no other app.
 
@@ -25,9 +26,10 @@ Small, readable files:
 | `src/sidebar.js` | The sidebar. Reads and rearranges Claude's sidebar in the page, keeps a few settings in the page's `localStorage`. |
 | `build.mjs` | Fills the icon table into the sidebar and writes the sidebar file. |
 | `patch.mjs` | The archive rewrite, fingerprint, certificate, signing and the swap. Runs only local tools: `codesign`, `security`, `openssl`, `PlistBuddy`, `ditto`. |
-| `install.sh`, `uninstall.sh` | Checks, then call `patch.mjs`. |
+| `agent.mjs` | The background agent: one check per run, plus `--install` and `--remove` for its LaunchAgent. Runs only `patch.mjs`, `ps`, `osascript`, `plutil` and `launchctl`. |
+| `install.sh`, `uninstall.sh` | Checks, then call `patch.mjs` and `agent.mjs`. |
 | `vendor/claude-sidebar-icons/` | The icon fonts and their list, with licences. |
-| `test/` | Tests for `patch.mjs`, run against a copy of Claude in a temporary folder. Not used by the install. |
+| `test/` | Tests for `patch.mjs` and `agent.mjs`, run against a copy of Claude in a temporary folder. Not used by the install. |
 | `dev/` | Tools for working on the sidebar. Not used by the install. |
 
 Quick checks:
@@ -46,12 +48,14 @@ Tell them, in your own words:
 - This modifies Claude for Desktop itself. Claude will be signed by a certificate on their Mac instead of by Anthropic, so macOS no longer vouches that it's Anthropic's code.
 - A Claude update replaces the patched app, so after one they run the installer again.
 - It's unofficial. A Claude update, or a change to the claude.ai page, can break the sidebar until the mod is updated. Modifying the app may not be allowed by Anthropic's terms.
+- A background agent stays installed and patches Claude again after each Claude update, once Claude is closed. They can leave it out with `--no-agent`.
 - They install it at their own risk. `./uninstall.sh` takes it out, and a fresh download of Claude restores it exactly.
 
 Show them the output of `./install.sh --plan`, and install only after they say yes.
 
 ## Installing
 
+- **Where the folder lives.** The background agent runs from the cloned folder, so clone it somewhere permanent, such as `~/code/claude-double-sidebar-mod`. Not a temporary folder, and not a folder that belongs to your session, which may be deleted with it.
 - **The command**, once they've agreed: `./install.sh --yes`. `--yes` skips the installer's own "quit Claude?" question, since they've already answered it.
 - **In a terminal** (Claude Code in Terminal, or any agent outside Claude for Desktop), it runs start to finish.
 - **Inside Claude for Desktop** (Claude Code in its Code tab, or its terminal panel), quitting Claude would stop the install partway. So when Claude needs patching (`node patch.mjs --state` prints `needs-patch`), the installer opens a Terminal window, carries on there and exits straight away. Claude then quits, and your session with it. Before you run it, tell the person: Claude will close, the install finishes in Terminal and reopens Claude, and they can come back to this conversation then. A sidebar-only update stays where it is and doesn't quit Claude. `./uninstall.sh` moves to Terminal the same way.
@@ -62,9 +66,10 @@ Show them the output of `./install.sh --plan`, and install only after they say y
 - `node patch.mjs --state` prints `installed`. It prints `needs-patch` if Claude has no loader, and exits 2 with the reason if it can't read Claude.
 - `codesign --verify --strict /Applications/Claude.app` succeeds.
 - `~/Library/Application Support/ClaudeDoubleSidebar/sidebar.js` exists.
+- `launchctl print gui/$(id -u)/local.claude-double-sidebar` finds the agent, unless they chose `--no-agent`.
 - After Claude reopens, a rail of icons runs down the left edge of its sidebar.
 
 ## Updating and undoing
 
 - **Update:** `git pull`, then `./install.sh --yes`. A sidebar-only update replaces one file, leaves Claude open, and macOS asks nothing.
-- **Undo:** `./uninstall.sh --yes` puts back Claude's own `app.asar` and removes the sidebar file. It keeps the icon fonts, because section and session names that hold icons need them; `--remove-fonts` removes them too. The "Claude Local" certificate stays in the keychain, where the person can delete it in Keychain Access.
+- **Undo:** `./uninstall.sh --yes` removes the background agent, puts back Claude's own `app.asar` and removes the sidebar file. It keeps the icon fonts, because section and session names that hold icons need them; `--remove-fonts` removes them too. The "Claude Local" certificate stays in the keychain, where the person can delete it in Keychain Access.

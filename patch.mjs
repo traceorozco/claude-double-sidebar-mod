@@ -34,6 +34,9 @@ const BACKUP = ASAR + '.original'
 const ENTRY = '.vite/build/index.js'
 const dev = process.argv.includes('--dev')
 const LOADER = `/* claude-double-sidebar loader 1${dev ? ' dev' : ''} */`
+// Anthropic's team. Claude is signed so that either the local signature or Anthropic's satisfies it, which
+// lets Claude's own updater install Anthropic's updates over the patched app
+const ANTHROPIC_TEAM = 'Q6L2SF6YDW'
 
 const sha = b => createHash('sha256').update(b).digest('hex')
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], ...opts }).toString()
@@ -116,11 +119,20 @@ function inspect(app) {
   try { fingerprint = plistBuddy('Print :ElectronAsarIntegrity:Resources/app.asar:hash', join(app, PLIST)) } catch {}
   if (!fingerprint) unlike(`its Info.plist has no app.asar fingerprint`)
   if (fingerprint !== asar.headerHash) unlike(`its app.asar fingerprint doesn't match the archive`)
-  return { version, patched: bytes(buf, asar.dataStart, entry).toString().startsWith(LOADER) }
+  // patched: the loader, and signing that also accepts Anthropic's updates (installs before it lack that)
+  const loader = bytes(buf, asar.dataStart, entry).toString().startsWith(LOADER)
+  return { version, patched: loader && acceptsAnthropic(app) }
+}
+
+function acceptsAnthropic(app) {
+  let r = ''
+  try { r = run('codesign', ['-d', '-r-', app]) } catch {}
+  return /certificate leaf = H"[0-9a-f]+"/i.test(r) && r.includes(ANTHROPIC_TEAM)
 }
 
 // Claude, or any of its helpers, running from this copy of the app
-const running = app => run('ps', ['-axo', 'comm=']).split('\n').some(l => l.startsWith(app + '/'))
+const running = app => process.env.DOUBLE_SIDEBAR_FAKE_RUNNING === '1' ||
+  run('ps', ['-axo', 'comm=']).split('\n').some(l => l.startsWith(app + '/'))
 
 const CERT = 'Claude Local'
 const SAVED = join(USER_HOME, 'Library/Application Support/claude-double-sidebar-mod')
@@ -155,6 +167,16 @@ function ensureCertificate() {
   if (!hasCertificate()) refuse(`The "${CERT}" certificate isn't usable for signing. Claude wasn't changed.`)
 }
 
+// Claude's designated requirement: this app, signed either by the local certificate or by Anthropic in
+// the way Anthropic's own requirement for Claude asks
+function rules(app) {
+  const id = plistBuddy('Print :CFBundleIdentifier', join(app, PLIST))
+  const leaf = run('security', ['find-certificate', '-c', CERT, '-Z']).match(/SHA-1 hash: (\w+)/)[1].toLowerCase()
+  return `designated => identifier "${id}" and (certificate leaf = H"${leaf}" or anchor apple generic and ` +
+    `certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and ` +
+    `certificate leaf[subject.OU] = "${ANTHROPIC_TEAM}")`
+}
+
 function resign(app) {
   // Claude's provisioning profile and team-bound entitlements only work under Anthropic's signature:
   // set aside, and dropped from the entitlements a local signature carries. The rest stay.
@@ -169,7 +191,7 @@ function resign(app) {
   }
   try {
     failAt('sign')
-    run('codesign', ['--force', '--sign', CERT, '--entitlements', ents, app])
+    run('codesign', ['--force', '--sign', CERT, '--entitlements', ents, `-r=${rules(app)}`, app])
   } finally {
     rmSync(ents, { force: true })
   }
@@ -207,6 +229,7 @@ function staged(change) {
     change(STAGE)
     resign(STAGE)
     const check = inspect(STAGE)
+    if (running(APP)) refuse("Claude was opened while the copy was made. Run this again once it's closed. Claude wasn't changed.")
     renameSync(APP, OLD)
     try {
       failAt('swap')
@@ -240,6 +263,7 @@ function install() {
   // So a sidebar update only replaces that file, and Claude is re-signed (a new build, which macOS asks
   // about for keychain access) only when the loader is missing or changed: a first install, or a new Claude.
   if (patched) {
+    recordDone()
     console.log('Claude already has the loader: nothing to re-sign. Quit and reopen Claude to see the change.')
     return
   }
@@ -267,7 +291,18 @@ function install() {
     writeFileSync(asar, out)
     setIntegrity(app, headerHash)
   })
+  recordDone()
   console.log(`Patched Claude ${version} at ${APP}${dev ? ' (dev: debug port 127.0.0.1:9339)' : ''}. Quit and reopen Claude.`)
+}
+
+// tells the background agent (agent.mjs) this build of Claude is taken care of
+function recordDone() {
+  const f = join(SAVED, 'agent.json')
+  let s = {}
+  try { s = JSON.parse(readFileSync(f, 'utf8')) } catch {}
+  s.done = plistBuddy('Print :ElectronAsarIntegrity:Resources/app.asar:hash', join(APP, PLIST))
+  mkdirSync(SAVED, { recursive: true })
+  writeFileSync(f, JSON.stringify(s, null, 2) + '\n')
 }
 
 function restore() {
@@ -288,6 +323,7 @@ function plan() {
   lines.push(`Always:`)
   lines.push(`  - writes the sidebar to ${SIDEBAR_FILE}`)
   lines.push(`  - copies 4 icon fonts (CCSidebarIcons*.ttf, named Segoe UI Symbol, Segoe UI, Roboto and Consolas) to ~/Library/Fonts`)
+  lines.push(`  - sets up a background agent, ~/Library/LaunchAgents/local.claude-double-sidebar.plist, that puts the sidebar back after Claude updates, the next time Claude is closed, and tells you in a notification (./install.sh --no-agent leaves it out)`)
   if (!patched) {
     lines.push('', `Claude.app needs the loader, so this run also:`)
     lines.push(`  - quits Claude while it patches`)
@@ -299,6 +335,7 @@ function plan() {
     lines.push(`  - removes Anthropic-only entitlements (application identifier, team identifier, associated domains, keychain access groups) from Claude's signature`)
     lines.push(hasCertificate() ? `  - signs the copy with the "${CERT}" certificate already in your login keychain`
                                 : `  - creates a self-signed code-signing certificate "${CERT}" in your login keychain, and signs the copy with it`)
+    lines.push(`  - signs it so that Anthropic's signature also satisfies it, so Claude's own updater can still install updates`)
     lines.push(`  - checks the copy's signature, then swaps it in for ${APP}. If any step fails, Claude stays as it was`)
     lines.push('', `Afterwards: Claude is signed by "${CERT}", not Anthropic. macOS asks once whether Claude may use "Claude Safe Storage".`)
   } else {

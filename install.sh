@@ -7,16 +7,18 @@
 #   ./install.sh          install or update, asking before it quits Claude
 #   ./install.sh --plan   list every change it would make, and change nothing
 #   ./install.sh --yes    install or update without asking (quits Claude if it needs to)
+#   ./install.sh --no-agent   without the background agent that puts the sidebar back after Claude updates
 set -e
 cd "$(dirname "$0")"
 
 APP="${CLAUDE_APP:-/Applications/Claude.app}"
-YES=false; PLAN=false
+YES=false; PLAN=false; AGENT=true
 for arg in "$@"; do
   case "$arg" in
     --yes|-y) YES=true ;;
     --plan) PLAN=true ;;
-    *) echo "Unknown option: $arg (use --plan or --yes)"; exit 1 ;;
+    --no-agent) AGENT=false ;;
+    *) echo "Unknown option: $arg (use --plan, --yes or --no-agent)"; exit 1 ;;
   esac
 done
 
@@ -56,8 +58,11 @@ if [ "$state" = needs-patch ]; then
   # the final build only: --dev opens a debug port and is for working on the sidebar itself
   # if it stops, Claude is as it was: reopen it either way
   node patch.mjs || { open -a "$APP"; exit 1; }
+  $AGENT && node agent.mjs --install
   echo "Opening Claude. If macOS asks about \"Claude Safe Storage\", choose Always Allow."
   open -a "$APP"
 else
   node patch.mjs
+  $AGENT && node agent.mjs --install
 fi
+$AGENT || node agent.mjs --remove
