@@ -10,7 +10,7 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn, spawnSync, execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync, existsSync, readFileSync, renameSync, readdirSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, renameSync, readdirSync, cpSync, realpathSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import vm from 'node:vm'
 import { tmpdir } from 'node:os'
@@ -238,6 +238,41 @@ test('once Claude is closed, the agent patches it and says so once', () => {
   assert.deepEqual(agent().notes, [])
 })
 
+const MOD = join(HOME, 'Library/Application Support/claude-double-sidebar-mod')
+const RUNTIME = join(MOD, 'runtime')
+const LAUNCHER = join(RUNTIME, 'agent.sh')
+const AGENT_PLIST = join(HOME, 'Library/LaunchAgents/local.claude-double-sidebar.plist')
+const agentEnv = (env = {}) => ({ ...process.env, CLAUDE_APP: APP, DOUBLE_SIDEBAR_HOME: HOME, DOUBLE_SIDEBAR_NOTIFY: 'print',
+  DOUBLE_SIDEBAR_NO_LAUNCHD: '1', DOUBLE_SIDEBAR_FAIL_AT: '', DOUBLE_SIDEBAR_FAKE_RUNNING: '', ...env })
+// what launchd would run: the launcher in the agent's own copy
+const launch = (env = {}) => {
+  const r = spawnSync('/bin/sh', [LAUNCHER], { env: agentEnv(env), encoding: 'utf8' })
+  return { status: r.status, out: r.stdout + r.stderr, notes: (r.stdout.match(/notify: .*/g) || []).map(l => l.slice(8)) }
+}
+
+test('the agent runs from its own copy, so the cloned folder can be deleted', () => {
+  // a clone somewhere temporary, set up, then deleted
+  const clone = join(dir, 'clone')
+  const repo = dirname(PATCH)
+  for (const f of ['agent.mjs', 'patch.mjs', 'build.mjs', 'src', 'vendor']) cpSync(join(repo, f), join(clone, f), { recursive: true })
+  const r = spawnSync('node', [join(clone, 'agent.mjs'), '--install'], { env: agentEnv(), encoding: 'utf8' })
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  rmSync(clone, { recursive: true, force: true })
+
+  const plist = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', AGENT_PLIST]).toString())
+  assert.deepEqual(plist.ProgramArguments, ['/bin/sh', LAUNCHER])
+  assert.equal(realpathSync(readFileSync(join(RUNTIME, 'source'), 'utf8').trim().replace(/\/clone$/, '')), realpathSync(dir))
+
+  // a Claude update while Claude is open: the copy works out what's needed and says so
+  assert.equal(patch(['--restore']).status, 0)
+  const run = launch({ DOUBLE_SIDEBAR_FAKE_RUNNING: '1' })
+  assert.equal(run.status, 0, run.out)
+  assert.doesNotMatch(run.out, /Cannot find module|Error/)
+  assert.equal(run.notes.length, 1, run.out)
+  assert.match(run.notes[0], /comes back the next time you quit Claude/)
+  assert.equal(patch().status, 0)
+})
+
 test('when its patch fails, the agent leaves Claude as it was and does not retry', () => {
   assert.equal(patch(['--restore']).status, 0)
   const was = snapshot()
@@ -273,4 +308,23 @@ test('the agent leaves a Claude it does not recognise alone and says so once', (
   assert.match(r.notes[0], /laid out in a way this version of the sidebar mod doesn't know/)
   assert.deepEqual(agent().notes, [])
   assert.deepEqual(snapshot(), was)
+})
+
+test('if the Node.js the agent was set up with goes missing, it says so once', () => {
+  const launcher = readFileSync(LAUNCHER, 'utf8')
+  writeFileSync(LAUNCHER, launcher.replace(/^NODE=.*$/m, "NODE='/nowhere/node'"))
+  const first = launch()
+  assert.equal(first.status, 0, first.out)
+  assert.equal(first.notes.length, 1, first.out)
+  assert.match(first.notes[0], /can't find Node\.js/)
+  assert.match(first.notes[0], /Run \.\/install\.sh again/)
+  assert.deepEqual(launch().notes, [])
+})
+
+test('removing the agent takes out its LaunchAgent, its copy, its settings and its log', () => {
+  writeFileSync(join(HOME, 'Library/Logs/claude-double-sidebar.log'), 'a line\n')
+  const r = spawnSync('node', [join(RUNTIME, 'agent.mjs'), '--remove'], { env: agentEnv(), encoding: 'utf8' })
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  for (const f of [AGENT_PLIST, RUNTIME, join(MOD, 'agent.json'), join(HOME, 'Library/Logs/claude-double-sidebar.log')])
+    assert.ok(!existsSync(f), `${f} should be gone`)
 })

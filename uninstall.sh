@@ -1,6 +1,6 @@
 #!/bin/bash
-# Takes the double sidebar out of Claude: puts back Claude's own app.asar, re-signs it locally, and removes
-# the sidebar file. For Claude exactly as Anthropic shipped it, signature included, download it
+# Takes the double sidebar out of Claude: removes the background agent, puts back Claude's own app.asar,
+# re-signs it locally, and removes the sidebar file and the mod's own folder. For Claude exactly as Anthropic shipped it, signature included, download it
 # again from claude.ai/download.
 #
 #   ./uninstall.sh                 uninstall, asking before it quits Claude; keeps the icon fonts
@@ -45,7 +45,9 @@ fi
 # the agent first, so it doesn't patch Claude again straight after
 node agent.mjs --remove
 node patch.mjs --restore || { open -a "$APP"; exit 1; }
-rm -rf "$HOME/Library/Application Support/ClaudeDoubleSidebar"
+# the sidebar file, and the mod's own folder: the agent's copy, its settings and Claude's set-aside provisioning
+# profile, which a fresh download of Claude brings back
+rm -rf "$HOME/Library/Application Support/ClaudeDoubleSidebar" "$HOME/Library/Application Support/claude-double-sidebar-mod"
 if $FONTS; then
   rm -f "$HOME"/Library/Fonts/CCSidebarIcons*.ttf
   echo "Removed the icon fonts."

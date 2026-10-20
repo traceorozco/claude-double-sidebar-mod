@@ -4,12 +4,14 @@
 // patch is left alone after that, so it never retries in a loop.
 //
 //   node agent.mjs            one check (what launchd runs)
-//   node agent.mjs --install  set up the LaunchAgent for this folder and the node running it
-//   node agent.mjs --remove   take the LaunchAgent out
+//   node agent.mjs --install  copy what the check needs to its own folder and set up the LaunchAgent there
+//   node agent.mjs --remove   take the LaunchAgent and that copy out
 //
+// The check runs from its own copy in Application Support, not from the cloned repo, so the clone can be
+// moved or deleted. A small launcher in front of it says so, once, if the Node.js it was set up with is gone.
 // It reads nothing but Claude.app and its own state file, and runs nothing but patch.mjs, ps and osascript.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, cpSync, chmodSync } from 'node:fs'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,6 +24,12 @@ const LABEL = 'local.claude-double-sidebar'
 const PLIST = join(USER_HOME, 'Library/LaunchAgents', `${LABEL}.plist`)
 const LOG = join(USER_HOME, 'Library/Logs/claude-double-sidebar.log')
 const STATE = join(USER_HOME, 'Library/Application Support/claude-double-sidebar-mod/agent.json')
+// the check's own copy of the mod, and the launcher launchd runs
+const RUNTIME = join(USER_HOME, 'Library/Application Support/claude-double-sidebar-mod/runtime')
+const LAUNCHER = join(RUNTIME, 'agent.sh')
+const RUNTIME_FILES = ['agent.mjs', 'patch.mjs', 'build.mjs', 'src/sidebar.js', 'vendor/claude-sidebar-icons']
+// the tests set DOUBLE_SIDEBAR_NO_LAUNCHD=1 to set up and remove everything but the launchd registration
+const launchd = process.env.DOUBLE_SIDEBAR_NO_LAUNCHD !== '1'
 const domain = `gui/${process.getuid()}`
 
 const log = msg => console.log(`${new Date().toISOString()} ${msg}`)
@@ -84,15 +92,41 @@ function check() {
   s.build.reason = (r.stderr || r.stdout).trim().split('\n').filter(Boolean).slice(-2).join(' ')
   save(s)
   log(`Patch failed: ${s.build.reason}`)
-  tell('failed', `Couldn't put the sidebar back for Claude ${version}. Claude works as normal. Run ./install.sh in ${here} to see why.`)
+  let source = ''
+  try { source = readFileSync(join(here, 'source'), 'utf8').trim() } catch {}
+  tell('failed', `Couldn't put the sidebar back for Claude ${version}. Claude works as normal. Run ./install.sh ${source ? `in ${source}` : 'from the mod\'s folder'} to see why.`)
 }
+
+const shellQuote = s => `'${s.replace(/'/g, `'\\''`)}'`
 
 function install() {
   mkdirSync(dirname(PLIST), { recursive: true })
   mkdirSync(dirname(LOG), { recursive: true })
+  // the check's own copy, refreshed on every install, and where it came from for messages
+  if (here !== RUNTIME) {
+    rmSync(RUNTIME, { recursive: true, force: true })
+    for (const f of RUNTIME_FILES) cpSync(join(here, f), join(RUNTIME, f), { recursive: true })
+    writeFileSync(join(RUNTIME, 'source'), here + '\n')
+  }
+  // The launcher: runs the check with this Node.js. If that Node.js is gone (removed, or replaced by an
+  // upgrade), it can't run any JavaScript, so it says so itself, once, until the next install.
+  const missing = join(RUNTIME, 'node-missing')
+  rmSync(missing, { force: true })
+  const text = `The sidebar mod's background check can't find Node.js at ${process.execPath}, so it can't put the sidebar back after Claude updates. Run ./install.sh again to fix it.`
+  writeFileSync(LAUNCHER, [
+    '#!/bin/sh',
+    `NODE=${shellQuote(process.execPath)}`,
+    `[ -x "$NODE" ] && exec "$NODE" ${shellQuote(join(RUNTIME, 'agent.mjs'))}`,
+    `[ -e ${shellQuote(missing)} ] && exit 0`,
+    `touch ${shellQuote(missing)}`,
+    `echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) notify: "${shellQuote(text)}`,
+    `[ "$DOUBLE_SIDEBAR_NOTIFY" = print ] || osascript -e ${shellQuote(`display notification ${JSON.stringify(text)} with title "Claude Double Sidebar"`)}`,
+    '',
+  ].join('\n'))
+  chmodSync(LAUNCHER, 0o755)
   const agent = {
     Label: LABEL,
-    ProgramArguments: [process.execPath, join(here, 'agent.mjs')],
+    ProgramArguments: ['/bin/sh', LAUNCHER],
     WatchPaths: [join(APP, 'Contents/Info.plist')],
     StartInterval: 60,
     RunAtLoad: true,
@@ -106,15 +140,16 @@ function install() {
   writeFileSync(json, JSON.stringify(agent))
   execFileSync('plutil', ['-convert', 'xml1', '-o', PLIST, json])
   rmSync(json, { force: true })
-  spawnSync('launchctl', ['bootout', `${domain}/${LABEL}`], { stdio: 'ignore' })
-  execFileSync('launchctl', ['bootstrap', domain, PLIST])
-  console.log(`Background agent set up: ${PLIST}`)
+  if (launchd) {
+    spawnSync('launchctl', ['bootout', `${domain}/${LABEL}`], { stdio: 'ignore' })
+    execFileSync('launchctl', ['bootstrap', domain, PLIST])
+  }
+  console.log(`Background agent set up: ${PLIST}, running from ${RUNTIME}`)
 }
 
 function remove() {
-  spawnSync('launchctl', ['bootout', `${domain}/${LABEL}`], { stdio: 'ignore' })
-  rmSync(PLIST, { force: true })
-  rmSync(STATE, { force: true })
+  if (launchd) spawnSync('launchctl', ['bootout', `${domain}/${LABEL}`], { stdio: 'ignore' })
+  for (const f of [PLIST, STATE, LOG, RUNTIME]) rmSync(f, { recursive: true, force: true })
   console.log('Background agent removed.')
 }
 
