@@ -58,6 +58,10 @@ A double sidebar for the Claude desktop app on macOS, in Chat, Cowork and Code, 
 </tr>
 </table>
 
+<p align="center"><img src="docs/screenshots/new-section-dialog.png" alt="Claude's New section dialog with an icon picker under the name" width="420"></p>
+
+<p align="center"><em>Making a section: name it and pick its icon in Claude's own dialog.</em></p>
+
 ## How it works
 
 Claude's sidebar is part of the claude.ai page the app loads. The patch adds a small loader to Claude that runs the sidebar inside that page each time it loads, so it builds on Claude's real sidebar. The sidebar itself is a file outside the app, in `~/Library/Application Support/ClaudeDoubleSidebar/`, so updating it never touches Claude again.

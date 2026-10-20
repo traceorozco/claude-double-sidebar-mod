@@ -46,9 +46,8 @@ The first should find nothing. The second finds nothing that is fetched (`patch.
 Tell them, in your own words:
 
 - This modifies Claude for Desktop itself. Claude will be signed by a certificate on their Mac instead of by Anthropic, so macOS no longer vouches that it's Anthropic's code.
-- A Claude update replaces the patched app, so after one they run the installer again.
 - It's unofficial. A Claude update, or a change to the claude.ai page, can break the sidebar until the mod is updated. Modifying the app may not be allowed by Anthropic's terms.
-- A background agent stays installed and patches Claude again after each Claude update, once Claude is closed. They can leave it out with `--no-agent`.
+- A Claude update replaces the patched app. A background agent stays installed and patches Claude again the next time Claude is closed. They can leave it out with `--no-agent`, and then run the installer again after each Claude update.
 - They install it at their own risk. `./uninstall.sh` takes it out, and a fresh download of Claude restores it exactly.
 
 Show them the output of `./install.sh --plan`, and install only after they say yes.
