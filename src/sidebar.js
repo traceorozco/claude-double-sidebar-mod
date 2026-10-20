@@ -40,6 +40,10 @@ aside.dframe-sidebar[data-ds] > .dframe-sidebar-body { margin-inline-start: ${RA
 aside.dframe-sidebar[data-ds] > .df-titlebar { box-shadow: inset 0 -1px 0 var(--ds-line); }
 .dframe-root[data-ds-closed] > main.dframe-content { left: ${RAIL_W}px !important; }
 .dframe-root[data-ds-closed] > [data-ds-rail] { border-top: 1px solid var(--ds-line); }
+/* the account avatar at the rail's foot, only while the sidebar (and its footer) is closed */
+[data-ds-rail] [data-ds-avatar] { margin-top: auto; flex: none; }
+.dframe-root:not([data-ds-closed]) > [data-ds-rail] [data-ds-avatar] { display: none; }
+[data-ds-rail] [data-ds-avatar] [data-cds="Avatar"] { pointer-events: none; }
 .dframe-root[data-ds-host] { --ds-line: rgb(0 0 0 / .08); --ds-rail: rgb(0 0 0 / .028); --ds-hover: rgb(0 0 0 / .05); --ds-on: rgb(0 0 0 / .085);
   --ds-menu: #fff; --ds-menu-ink: #3d3d3a; --ds-menu-line: #d7d7d5; --ds-tip: #1f1e1d; --ds-tip-ink: #fff; }
 [data-mode="dark"] .dframe-root[data-ds-host], .dframe-root[data-ds-host][data-mode="dark"] { --ds-line: rgb(255 255 255 / .08); --ds-rail: rgb(0 0 0 / .2);
@@ -558,7 +562,10 @@ function render(aside) {
   const list = sections()
   let lane = load(KEY_LANE, 'home')
   if (lane !== 'home' && !list.some(s => s.id === lane)) lane = 'home'
-  const sig = JSON.stringify([lane, list])
+  // Claude's account button stays in the page while the sidebar is closed, only faded out with it
+  const account = document.querySelector('[data-testid="user-menu-button"]')
+  const avatar = account?.querySelector('[data-cds="Avatar"]')
+  const sig = JSON.stringify([lane, list, avatar?.outerHTML || ''])
   if (rail.dataset.sig === sig) return
   rail.dataset.sig = sig
   rail.replaceChildren()
@@ -597,6 +604,14 @@ function render(aside) {
     circle.className = 'df-new-circle'
     circle.innerHTML = svg('plus')
     plus.replaceChildren(circle)
+  }
+  if (avatar) {
+    const me = button((account.innerText || 'Account').split('\n').map(t => t.trim()).filter(t => t.length > 1 && t !== '·').join(' · ') || 'Account', avatar.cloneNode(true), () => {
+      hideTip()
+      document.querySelector('[data-testid="user-menu-button"]')?.click()
+    })
+    me.setAttribute('data-ds-avatar', '')
+    me.setAttribute('aria-haspopup', 'menu')
   }
   applyLane(aside, lane)
 }
