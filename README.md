@@ -1,6 +1,20 @@
+<div align="center">
+
+<img src="docs/logo.svg" alt="Claude Double Sidebar mod" width="120">
+
 # Claude Double Sidebar mod
 
-**Unofficial.** Not made by or affiliated with Anthropic.
+**Your Claude sidebar, sorted into sections, with a rail to move between them.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
+[![Platform: macOS](https://img.shields.io/badge/platform-macOS-black.svg)](#install)
+[![Icons: 245](https://img.shields.io/badge/icons-245-black.svg)](https://github.com/traceorozco/claude-sidebar-icons)
+[![Unofficial](https://img.shields.io/badge/unofficial-not%20by%20Anthropic-lightgrey.svg)](#before-you-install)
+
+<a href="https://github.com/traceorozco"><img src="https://github.com/traceorozco.png?size=64" alt="" width="32" height="32"></a><br>
+Made by <a href="https://github.com/traceorozco">Trace Orozco</a>
+
+</div>
 
 ![Claude with the double sidebar: a rail of section icons beside Claude's own sidebar](docs/screenshots/sidebar-open.webp)
 
