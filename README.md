@@ -2,8 +2,6 @@
 
 **Unofficial.** Not made by or affiliated with Anthropic.
 
-The mod version of the [Claude Double Sidebar plugin](https://github.com/traceorozco/claude-double-sidebar-plugin). The plugin draws its sidebar in a separate app on top of Claude. This mod builds it into Claude itself.
-
 A double sidebar for the Code tab in Claude for Desktop on macOS, drawn inside Claude's own sidebar:
 
 - A rail down the sidebar's left edge with Home and one icon per section. Hover an icon for the section's name.
