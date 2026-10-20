@@ -51,6 +51,16 @@ What you give up:
 - Claude's automatic updates stop working. To update, download Claude again from claude.ai/download, then run the installer again.
 - Claude is no longer signed by Anthropic on your Mac. It's signed by your own certificate instead.
 
+## Before you install
+
+This modifies Claude for Desktop itself, and you install it at your own risk:
+
+- Claude is signed by a certificate on your Mac instead of by Anthropic.
+- Claude's automatic updates stop. Download Claude again to update, then rerun the installer.
+- It's unofficial. A Claude update, or a change to the claude.ai page, can break the sidebar until the mod catches up. Modifying the app may not be allowed by Anthropic's terms.
+
+`./install.sh --plan` lists every change it would make on your Mac, and changes nothing. If an AI is installing it for you, it should read [AGENTS.md](AGENTS.md) first.
+
 ## Install
 
 Needs macOS, [Node.js](https://nodejs.org) 18 or newer, and Apple's command line tools (`xcode-select --install`).
@@ -62,6 +72,8 @@ git clone https://github.com/traceorozco/claude-double-sidebar-mod.git
 cd claude-double-sidebar-mod
 ./install.sh
 ```
+
+`./install.sh --yes` does the same without asking before it quits Claude.
 
 The first time, macOS may ask:
 
@@ -89,7 +101,7 @@ After a Claude update, the new Claude has no loader, so the sidebar disappears. 
 ./uninstall.sh
 ```
 
-This puts back Claude's own files and signs it with your certificate. For Claude exactly as Anthropic ships it, with its own signature and updates, download it again from claude.ai/download.
+This puts back Claude's own files, signs Claude with your certificate and removes the sidebar file. It keeps the icon fonts, because section and session names with icons need them: add `--remove-fonts` to remove those too. Add `--yes` to skip the question before it quits Claude. For Claude exactly as Anthropic ships it, with its own signature and updates, download it again from claude.ai/download.
 
 ## Working on the sidebar
 

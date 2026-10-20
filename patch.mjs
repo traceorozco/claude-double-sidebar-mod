@@ -4,6 +4,7 @@
 //   node patch.mjs               install or update the sidebar; re-signs Claude only when its loader needs it
 //   node patch.mjs --dev         for working on it, never ship: the same, plus a debug port on 127.0.0.1:9339
 //   node patch.mjs --needs-patch exit 0 when Claude needs the loader (and so a restart), 1 when it has it
+//   node patch.mjs --plan        list every change an install would make, and change nothing
 //   node patch.mjs --restore     put back the app.asar this patcher saved before its first change
 //
 // Claude checks app.asar against a hash in its signed Info.plist, so the patch rewrites that hash and
@@ -152,6 +153,33 @@ const currentEntry = () => {
 }
 const needsPatch = !currentEntry().startsWith(LOADER)
 if (process.argv.includes('--needs-patch')) process.exit(needsPatch ? 0 : 1)
+
+// --plan: every change this run would make, and nothing changed
+if (process.argv.includes('--plan')) {
+  const hasCert = run('security', ['find-identity', '-p', 'codesigning']).includes(`"${CERT}"`)
+  const profile = existsSync(join(APP, 'Contents/embedded.provisionprofile'))
+  const lines = [`Claude Double Sidebar mod: what installing would change on this Mac`, '']
+  lines.push(`Always:`)
+  lines.push(`  - writes the sidebar to ${SIDEBAR_FILE}`)
+  lines.push(`  - copies 4 icon fonts (CCSidebarIcons*.ttf, named Segoe UI Symbol, Segoe UI, Roboto and Consolas) to ~/Library/Fonts`)
+  if (needsPatch) {
+    lines.push('', `Claude.app needs the loader, so this run also:`)
+    lines.push(`  - quits Claude while it patches`)
+    lines.push(`  - saves Claude's original app.asar as ${BACKUP}`)
+    lines.push(`  - adds a loader to .vite/build/index.js inside ${ASAR}: on each claude.ai page load it reads the sidebar file and runs it in the page`)
+    lines.push(`  - updates the app.asar fingerprint in ${PLIST}`)
+    if (profile) lines.push(`  - moves Claude's provisioning profile to ${join(SAVED, 'embedded.provisionprofile')}`)
+    lines.push(`  - removes Anthropic-only entitlements (application identifier, team identifier, associated domains, keychain access groups) from Claude's signature`)
+    lines.push(hasCert ? `  - re-signs Claude with the "${CERT}" certificate already in your login keychain`
+                       : `  - creates a self-signed code-signing certificate "${CERT}" in your login keychain, and re-signs Claude with it`)
+    lines.push('', `Afterwards: Claude is signed by "${CERT}", not Anthropic. Its automatic updates stop working. macOS asks once whether Claude may use "Claude Safe Storage".`)
+  } else {
+    lines.push('', `Claude.app already has the loader: it is not changed or re-signed, and macOS asks nothing.`)
+  }
+  lines.push('', `Never: no network requests, nothing sent anywhere, no other app changed.`, `Undo: ./uninstall.sh`)
+  console.log(lines.join('\n'))
+  process.exit(0)
+}
 
 // the sidebar, built and put where the loader reads it
 build()
