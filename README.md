@@ -15,7 +15,16 @@ Made by <a href="https://github.com/traceorozco">Trace Orozco</a>
 
 </div>
 
-![Claude with the double sidebar: a rail of section icons beside Claude's own sidebar](docs/screenshots/sidebar-open.webp)
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/sidebar-open.png" alt="Claude's sidebar open, with the rail of section icons down its left edge"></td>
+<td width="50%"><img src="docs/screenshots/sidebar-closed.png" alt="Claude's sidebar closed: the rail stays, with your account at its foot"></td>
+</tr>
+<tr>
+<td>The rail beside Claude's own sidebar.</td>
+<td>Sidebar closed: the rail stays, with your account at its foot.</td>
+</tr>
+</table>
 
 A double sidebar for the Claude desktop app on macOS, in Chat, Cowork and Code, drawn inside Claude's own sidebar:
 
@@ -26,10 +35,6 @@ A double sidebar for the Claude desktop app on macOS, in Chat, Cowork and Code, 
 - Icons on sections and sessions: rename one and pick from 245 line icons, with search.
 - Subsections: name a session `research / woodblocks` and it sits under a RESEARCH heading in its section, shown without the prefix. A toggle on the rail switches between Show by subsection and Show all.
 - Close Claude's sidebar and the rail stays, with your account at its foot.
-
-![Sidebar closed: the rail stays, with your account at its foot](docs/screenshots/sidebar-closed.webp)
-
-<p align="center"><em>Sidebar closed: the rail stays, with your account at its foot.</em></p>
 
 <table>
 <tr>
@@ -53,25 +58,17 @@ A double sidebar for the Claude desktop app on macOS, in Chat, Cowork and Code, 
 </tr>
 </table>
 
-The icons are part of the names themselves, a character drawn by the [Claude sidebar icons](https://github.com/traceorozco/claude-sidebar-icons) font, so Claude shows them everywhere it shows a name.
-
 ## How it works
 
-Claude's sidebar is part of the claude.ai page the app loads. The patch adds a small loader to Claude that runs the sidebar inside that page each time it loads, so it builds on Claude's real sidebar. The sidebar itself is a file outside the app, in `~/Library/Application Support/ClaudeDoubleSidebar/`, so updating it never touches Claude again. Nothing sits on top of Claude: dialogs, menus and Settings work as they always do.
+Claude's sidebar is part of the claude.ai page the app loads. The patch adds a small loader to Claude that runs the sidebar inside that page each time it loads, so it builds on Claude's real sidebar. The sidebar itself is a file outside the app, in `~/Library/Application Support/ClaudeDoubleSidebar/`, so updating it never touches Claude again.
 
-That means changing Claude.app itself. Claude checks its files against a fingerprint in its signed settings, so the patch updates the fingerprint and signs Claude again with a certificate on your Mac called **Claude Local**, which the installer makes the first time. The same certificate every time keeps macOS's keychain and privacy permissions for Claude in place across installs.
-
-What you give up:
-
-- Claude's automatic updates stop working. To update, download Claude again from claude.ai/download, then run the installer again.
-- Claude is no longer signed by Anthropic on your Mac. It's signed by your own certificate instead.
+Claude checks its files against a fingerprint in its signed settings, so the patch updates the fingerprint and signs Claude again with a certificate on your Mac called **Claude Local**, which the installer makes the first time. The same certificate every time keeps macOS's keychain and privacy permissions for Claude in place across installs.
 
 ## Before you install
 
-This modifies Claude for Desktop itself, and you install it at your own risk:
+You install it at your own risk:
 
 - Claude is signed by a certificate on your Mac instead of by Anthropic.
-- Claude's automatic updates stop. Download Claude again to update, then rerun the installer.
 - It's unofficial. A Claude update, or a change to the claude.ai page, can break the sidebar until the mod catches up. Modifying the app may not be allowed by Anthropic's terms.
 
 `./install.sh --plan` lists every change it would make on your Mac, and changes nothing. If an AI is installing it for you, it should read [AGENTS.md](AGENTS.md) first.
@@ -116,7 +113,7 @@ After a Claude update, the new Claude has no loader, so the sidebar disappears. 
 ./uninstall.sh
 ```
 
-This puts back Claude's own files, signs Claude with your certificate and removes the sidebar file. It keeps the icon fonts, because section and session names with icons need them: add `--remove-fonts` to remove those too. Add `--yes` to skip the question before it quits Claude. For Claude exactly as Anthropic ships it, with its own signature and updates, download it again from claude.ai/download.
+This puts back Claude's own files, signs Claude with your certificate and removes the sidebar file. It keeps the icon fonts, because section and session names with icons need them: add `--remove-fonts` to remove those too. Add `--yes` to skip the question before it quits Claude. For Claude exactly as Anthropic ships it, with its own signature, download it again from claude.ai/download.
 
 ## Working on the sidebar
 

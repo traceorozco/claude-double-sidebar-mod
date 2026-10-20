@@ -1,6 +1,6 @@
 #!/bin/bash
 # Takes the double sidebar out of Claude: puts back Claude's own app.asar, re-signs it locally, and removes
-# the sidebar file. For Claude exactly as Anthropic shipped it, signature and updates included, download it
+# the sidebar file. For Claude exactly as Anthropic shipped it, signature included, download it
 # again from claude.ai/download.
 #
 #   ./uninstall.sh                 uninstall, asking before it quits Claude; keeps the icon fonts

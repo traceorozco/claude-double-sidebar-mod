@@ -43,7 +43,7 @@ The first should find nothing. The second finds nothing that is fetched (`patch.
 Tell them, in your own words:
 
 - This modifies Claude for Desktop itself. Claude will be signed by a certificate on their Mac instead of by Anthropic, so macOS no longer vouches that it's Anthropic's code.
-- Claude's automatic updates stop. To update Claude they download it again, then run the installer again.
+- A Claude update replaces the patched app, so after one they run the installer again.
 - It's unofficial. A Claude update, or a change to the claude.ai page, can break the sidebar until the mod is updated. Modifying the app may not be allowed by Anthropic's terms.
 - They install it at their own risk. `./uninstall.sh` takes it out, and a fresh download of Claude restores it exactly.
 
