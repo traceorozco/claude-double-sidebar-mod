@@ -36,8 +36,9 @@ const notify = text => {
   if (process.env.DOUBLE_SIDEBAR_NOTIFY !== 'print')
     spawnSync('osascript', ['-e', `display notification ${JSON.stringify(text)} with title "Claude Double Sidebar"`])
 }
+// the same check as patch.mjs: Claude, its Electron helpers or Squirrel, not what Chrome starts from Contents/Helpers
 const running = () => process.env.DOUBLE_SIDEBAR_FAKE_RUNNING === '1' ||
-  execFileSync('ps', ['-axo', 'comm=']).toString().split('\n').some(l => l.startsWith(APP + '/'))
+  execFileSync('ps', ['-axo', 'comm=']).toString().split('\n').some(l => [`${APP}/Contents/MacOS/`, `${APP}/Contents/Frameworks/`].some(p => l.startsWith(p)))
 const patch = args => spawnSync(process.execPath, [join(here, 'patch.mjs'), ...args], { encoding: 'utf8' })
 
 function check() {

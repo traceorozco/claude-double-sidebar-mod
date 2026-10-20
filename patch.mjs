@@ -131,8 +131,10 @@ function acceptsAnthropic(app) {
 }
 
 // Claude, or any of its helpers, running from this copy of the app
+// Claude open: its app, its Electron helpers, or Squirrel installing an update. Not Contents/Helpers, where
+// Chrome starts the Claude in Chrome host and keeps it running after Claude quits
 const running = app => process.env.DOUBLE_SIDEBAR_FAKE_RUNNING === '1' ||
-  run('ps', ['-axo', 'comm=']).split('\n').some(l => l.startsWith(app + '/'))
+  run('ps', ['-axo', 'comm=']).split('\n').some(l => [`${app}/Contents/MacOS/`, `${app}/Contents/Frameworks/`].some(p => l.startsWith(p)))
 
 const CERT = 'Claude Local'
 const SAVED = join(USER_HOME, 'Library/Application Support/claude-double-sidebar-mod')

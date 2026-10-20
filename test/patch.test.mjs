@@ -9,7 +9,7 @@
 
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { spawnSync, execFileSync } from 'node:child_process'
+import { spawn, spawnSync, execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, existsSync, readFileSync, renameSync, readdirSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
@@ -113,6 +113,22 @@ test('a run stopped mid-swap is put back on the next run', () => {
   assert.equal(state().out.trim(), 'installed')
   assert.ok(verified())
   assert.deepEqual(leftovers(), [])
+})
+
+test('the Claude in Chrome helper running from Claude does not count as Claude being open', async () => {
+  assert.equal(patch(['--restore']).status, 0)
+  // Chrome starts this host from inside Claude.app and keeps it running after Claude quits
+  const host = spawn(join(APP, 'Contents/Helpers/chrome-native-host'), [], { stdio: 'pipe' })
+  try {
+    await new Promise(r => setTimeout(r, 500))
+    assert.equal(host.exitCode, null, 'the helper should still be running')
+    const r = patch()
+    assert.equal(r.status, 0, r.out)
+    assert.equal(state().out.trim(), 'installed')
+    assert.deepEqual(agent().notes, [])
+  } finally {
+    host.kill()
+  }
 })
 
 test('Claude is signed so either the local certificate or Anthropic satisfies it', () => {
