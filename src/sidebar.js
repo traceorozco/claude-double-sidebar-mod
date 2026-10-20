@@ -664,7 +664,8 @@ function render(aside) {
     circle.innerHTML = svg('plus')
     plus.replaceChildren(circle)
   }
-  const subs = button('Group by subsection', 'tree', () => { hideTip(); save(KEY_SUBS, !load(KEY_SUBS, true)); render(aside); groupSubsections(lane) })
+  // named for what a click does next
+  const subs = button(subsOn ? 'Show all' : 'Show by subsection', 'tree', () => { hideTip(); save(KEY_SUBS, !load(KEY_SUBS, true)); render(aside); groupSubsections(lane) })
   subs.setAttribute('data-ds-subs', '')
   subs.setAttribute('aria-pressed', String(subsOn))
   if (avatar) {
