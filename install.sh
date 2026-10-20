@@ -1,5 +1,6 @@
 #!/bin/bash
-# Installs or updates the double sidebar in Claude for Desktop on this Mac. Run it from Terminal.
+# Installs or updates the double sidebar in Claude for Desktop on this Mac. Started inside Claude for
+# Desktop, it moves to a Terminal window when it has to quit Claude.
 # The first time, and after each Claude update, it patches Claude (and quits it while it does). Any other
 # time it only replaces the sidebar file, and Claude stays open.
 #
@@ -26,6 +27,18 @@ node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 18 ? 0 : 1)
 command -v codesign >/dev/null || { echo "This needs Apple's command line tools. Run: xcode-select --install"; exit 1; }
 
 if $PLAN; then node patch.mjs --plan; exit 0; fi
+
+# Run from inside Claude for Desktop (by Claude, or in its terminal), quitting Claude would stop this
+# partway. So when Claude needs patching, the install moves to a Terminal window, which outlives Claude.
+if [ "${__CFBundleIdentifier:-}" = com.anthropic.claudefordesktop ] && node patch.mjs --needs-patch; then
+  run="${TMPDIR:-/tmp}/claude-double-sidebar-install.command"
+  args=""; for a in "$@"; do args+=" $(printf %q "$a")"; done
+  printf '#!/bin/bash\ncd %q && ./install.sh%s\n' "$PWD" "$args" > "$run"
+  chmod +x "$run"
+  open -a Terminal "$run"
+  echo "Claude has to quit while it's patched, so the install continues in a Terminal window."
+  exit 0
+fi
 
 if node patch.mjs --needs-patch; then
   if pgrep -xq Claude; then

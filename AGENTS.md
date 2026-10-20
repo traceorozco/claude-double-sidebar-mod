@@ -51,8 +51,9 @@ Show them the output of `./install.sh --plan`, and install only after they say y
 
 ## Installing
 
-- **Where to run it.** If Claude needs patching (`node patch.mjs --needs-patch` exits 0), the installer quits Claude. If you are running inside Claude for Desktop, quitting it ends your session partway. In that case give the person the command to run in Terminal instead of running it yourself.
 - **The command**, once they've agreed: `./install.sh --yes`. `--yes` skips the installer's own "quit Claude?" question, since they've already answered it.
+- **In a terminal** (Claude Code in Terminal, or any agent outside Claude for Desktop), it runs start to finish.
+- **Inside Claude for Desktop** (Claude Code in its Code tab, or its terminal panel), quitting Claude would stop the install partway. So when Claude needs patching (`node patch.mjs --needs-patch` exits 0), the installer opens a Terminal window, carries on there and exits straight away. Claude then quits, and your session with it. Before you run it, tell the person: Claude will close, the install finishes in Terminal and reopens Claude, and they can come back to this conversation then. A sidebar-only update stays where it is and doesn't quit Claude. `./uninstall.sh` moves to Terminal the same way.
 - **macOS prompts are theirs.** The first time, macOS may ask for the login keychain password (to add the certificate), whether Claude may use "Claude Safe Storage" (choose **Always Allow**), and for them to sign in to Claude again. You can't answer these. Tell them to expect them.
 
 ## Checking it worked

@@ -20,6 +20,18 @@ for arg in "$@"; do
   esac
 done
 
+# Run from inside Claude for Desktop, quitting Claude would stop this partway, so it moves to a Terminal
+# window, which outlives Claude.
+if [ "${__CFBundleIdentifier:-}" = com.anthropic.claudefordesktop ]; then
+  run="${TMPDIR:-/tmp}/claude-double-sidebar-uninstall.command"
+  args=""; for a in "$@"; do args+=" $(printf %q "$a")"; done
+  printf '#!/bin/bash\ncd %q && ./uninstall.sh%s\n' "$PWD" "$args" > "$run"
+  chmod +x "$run"
+  open -a Terminal "$run"
+  echo "Claude has to quit while it's restored, so the uninstall continues in a Terminal window."
+  exit 0
+fi
+
 if pgrep -xq Claude; then
   if ! $YES; then
     read -r -p "Claude needs to quit. Quit it now? [y/N] " answer

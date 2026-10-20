@@ -71,13 +71,15 @@ You install it at your own risk:
 - Claude is signed by a certificate on your Mac instead of by Anthropic.
 - It's unofficial. A Claude update, or a change to the claude.ai page, can break the sidebar until the mod catches up. Modifying the app may not be allowed by Anthropic's terms.
 
-`./install.sh --plan` lists every change it would make on your Mac, and changes nothing. If an AI is installing it for you, it should read [AGENTS.md](AGENTS.md) first.
+`./install.sh --plan` lists every change it would make on your Mac, and changes nothing.
 
 ## Install
 
 Needs macOS, [Node.js](https://nodejs.org) 18 or newer, and Apple's command line tools (`xcode-select --install`).
 
-Run it from Terminal, not from inside Claude, because it quits Claude while it patches:
+**Ask Claude to install it.** Give Claude Code the link to this repo, in Terminal or in the Claude desktop app, and ask it to install the mod. It reads [AGENTS.md](AGENTS.md), shows you what will change and asks before it starts. Claude quits while it's patched, so in the desktop app the install moves to a Terminal window, where it finishes and reopens Claude.
+
+**Or run it yourself** in Terminal:
 
 ```bash
 git clone https://github.com/traceorozco/claude-double-sidebar-mod.git
