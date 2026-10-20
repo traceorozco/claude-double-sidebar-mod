@@ -519,7 +519,9 @@ function groupList(list, expand = false) {
   const leading = el => el.matches('[data-pinned-leading]')
   for (const el of items) setOrder(el, heading(el) ? -2 : leading(el) ? -1 : rows.includes(el) ? 0 : 100000)
   let o = 10
-  const names = [...cats.keys()].sort((a, b) => a.localeCompare(b))
+  // headings in the order Claude lists their sessions: A–Z when the section sorts by name, the most recently
+  // active first when it sorts by recency (Claude's own Group and sort setting decides)
+  const names = [...cats.keys()]
   for (const name of names) {
     const key = `${id}\n${name}`
     let head = [...list.querySelectorAll(':scope > [data-ds-sub]')].find(h => h.dataset.name === name)
