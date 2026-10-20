@@ -109,4 +109,6 @@ The code is `src/sidebar.js`. `node build.mjs` builds it into the sidebar file C
 
 ## Licences
 
+The mod is MIT licensed: see [LICENSE](LICENSE).
+
 Icons from [Lucide](https://lucide.dev) (ISC) and [Tabler Icons](https://tabler.io/icons) (MIT), through [Claude sidebar icons](https://github.com/traceorozco/claude-sidebar-icons). See `vendor/claude-sidebar-icons/licenses/`.
