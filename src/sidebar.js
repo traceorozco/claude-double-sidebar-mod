@@ -22,6 +22,7 @@ const UI = {
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
   caret: '<path d="m6 9 6 6 6-6"/>',
+  tree: '<path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/>',
   palette: '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
 }
 const svg = name => `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${UI[name]}</svg>`
@@ -44,7 +45,8 @@ aside.dframe-sidebar[data-ds] > .dframe-sidebar-body .df-bottom-tray { margin-in
 .dframe-root[data-ds-closed] > main.dframe-content { left: ${RAIL_W}px !important; }
 .dframe-root[data-ds-closed] > [data-ds-rail] { border-top: 1px solid var(--ds-line); }
 /* the account avatar at the rail's foot, only while the sidebar (and its footer) is closed */
-[data-ds-rail] [data-ds-avatar] { margin-top: auto; flex: none; }
+[data-ds-rail] [data-ds-subs] { margin-top: auto; }
+[data-ds-rail] [data-ds-avatar] { flex: none; }
 .dframe-root:not([data-ds-closed]) > [data-ds-rail] [data-ds-avatar] { display: none; }
 [data-ds-rail] [data-ds-avatar] [data-cds="Avatar"] { pointer-events: none; }
 .dframe-root[data-ds-host] { --ds-line: rgb(0 0 0 / .08); --ds-rail: rgb(0 0 0 / .028); --ds-hover: rgb(0 0 0 / .05); --ds-on: rgb(0 0 0 / .085);
@@ -468,13 +470,21 @@ function clearSubsections(list) {
   for (const r of list.querySelectorAll('[data-row-key]')) shortenLabel(r, false)
   for (const el of flexItems(list)) el.style.removeProperty('order')
 }
+const KEY_SUBS = 'doubleSidebar.subsections'
 function groupSubsections(lane) {
-  for (const l of document.querySelectorAll('aside.dframe-sidebar [data-group-list]')) if (l.getAttribute('data-group-list') !== lane) clearSubsections(l)
-  if (lane === 'home') return
-  const list = groupEl(lane)
-  if (!list) return
-  // every session of the section, not the first few: Claude's Show more, pressed once per visit
-  if (!list.hasAttribute('data-ds-expanded')) {
+  const on = load(KEY_SUBS, true)
+  const targets = !on ? [] : lane === 'home'
+    ? [...document.querySelectorAll('aside.dframe-sidebar [data-group-list][data-group-section^="custom-"]')]
+    : [groupEl(lane)].filter(Boolean)
+  for (const l of document.querySelectorAll('aside.dframe-sidebar [data-group-list]')) if (!targets.includes(l)) clearSubsections(l)
+  for (const list of targets) groupList(list, lane !== 'home')
+}
+function groupList(list, expand = false) {
+  const id = list.getAttribute('data-group-list')
+  // every session of the section, not the first few: Claude's Show more, pressed once per visit. In Home only
+  // for a section already showing a subsection, so sections without any keep Claude's short list
+  const shownCategorized = () => [...list.querySelectorAll('[data-row-key]:not([data-row-key^="label:"])')].some(r => categoryOf(rowTitle(r)))
+  if (!list.hasAttribute('data-ds-expanded') && (expand || shownCategorized())) {
     const more = list.querySelector('[data-row-key^="label:showmore:"] button')
     if (more) { list.setAttribute('data-ds-expanded', ''); more.click(); return }
   }
@@ -492,7 +502,7 @@ function groupSubsections(lane) {
   let o = 10
   const names = [...cats.keys()].sort((a, b) => a.localeCompare(b))
   for (const name of names) {
-    const key = `${lane}\n${name}`
+    const key = `${id}\n${name}`
     let head = [...list.querySelectorAll(':scope > [data-ds-sub]')].find(h => h.dataset.name === name)
     if (!head) {
       head = document.createElement('div')
@@ -506,7 +516,7 @@ function groupSubsections(lane) {
         const set = new Set(load(KEY_COLLAPSED, []))
         set.has(key) ? set.delete(key) : set.add(key)
         save(KEY_COLLAPSED, [...set])
-        groupSubsections(lane)
+        groupList(list, expand)
       }
       head.onclick = toggle
       head.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }
@@ -607,7 +617,8 @@ function render(aside) {
   // Claude's account button stays in the page while the sidebar is closed, only faded out with it
   const account = document.querySelector('[data-testid="user-menu-button"]')
   const avatar = account?.querySelector('[data-cds="Avatar"]')
-  const sig = JSON.stringify([lane, list, avatar?.outerHTML || ''])
+  const subsOn = load(KEY_SUBS, true)
+  const sig = JSON.stringify([lane, list, avatar?.outerHTML || '', subsOn])
   if (rail.dataset.sig === sig) return
   rail.dataset.sig = sig
   rail.replaceChildren()
@@ -647,6 +658,9 @@ function render(aside) {
     circle.innerHTML = svg('plus')
     plus.replaceChildren(circle)
   }
+  const subs = button('Group by subsection', 'tree', () => { hideTip(); save(KEY_SUBS, !load(KEY_SUBS, true)); render(aside); groupSubsections(lane) })
+  subs.setAttribute('data-ds-subs', '')
+  subs.setAttribute('aria-pressed', String(subsOn))
   if (avatar) {
     const me = button((account.innerText || 'Account').split('\n').map(t => t.trim()).filter(t => t.length > 1 && t !== '·').join(' · ') || 'Account', avatar.cloneNode(true), () => {
       hideTip()
