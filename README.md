@@ -8,7 +8,7 @@ A double sidebar for the Code tab in Claude for Desktop on macOS, drawn inside C
 - Click a section and the sidebar shows only that section's sessions. Home shows everything.
 - Right-click a section on the rail for New session, Change icon and Claude's own section options.
 - The + at the foot of the rail makes a new section, with an icon picked in Claude's New section dialog.
-- Icons on sections and sessions: rename one and pick from 177 line icons, with search.
+- Icons on sections and sessions: rename one and pick from 244 line icons, with search.
 
 The icons are part of the names themselves, a character drawn by the [Claude sidebar icons](https://github.com/traceorozco/claude-sidebar-icons) font, so Claude shows them everywhere it shows a name.
 
