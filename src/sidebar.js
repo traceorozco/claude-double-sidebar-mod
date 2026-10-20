@@ -76,6 +76,12 @@ aside.dframe-sidebar[data-ds-lane]:not([data-ds-lane="home"]) [data-recents-list
 [data-ds-sub][aria-expanded="false"] svg { transform: rotate(-90deg); }
 [data-ds-sub] [data-ds-count] { margin-inline-start: auto; font-size: 11px; opacity: .7; }
 [data-ds-sub-hidden] { display: none !important; }
+[data-ds-menuitem]:hover, [data-ds-menuitem]:focus-visible { background: var(--cds-fill-ghost-hover, rgb(0 0 0 / .05)); }
+[data-ds-menu] > [data-ds-heading] { padding: 6px 8px 2px; font-size: 12px; color: color-mix(in srgb, currentColor 55%, transparent); }
+[data-ds-menu] > hr { all: unset; display: block; height: 1px; margin: 4px 6px; background: var(--ds-menu-line); }
+[data-ds-menu] > input { all: unset; box-sizing: border-box; display: block; width: calc(100% - 8px); margin: 4px; height: 30px; padding: 0 8px; border-radius: 7px; font-size: 13px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent); }
+[data-ds-menu] > input:focus { border-color: color-mix(in srgb, currentColor 40%, transparent); }
 [data-ds-tip] { position: fixed; z-index: 2147483001; pointer-events: none; padding: 4px 8px; border-radius: 6px;
   background: var(--ds-tip, #1f1e1d); color: var(--ds-tip-ink, #fff); font-family: inherit; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; }
 [data-ds-menu] { position: fixed; z-index: 2147483000; min-width: 180px; padding: 4px; border-radius: 11px; font-family: inherit; font-size: 14px;
@@ -476,6 +482,67 @@ function groupSubsections(lane) {
   for (const r of rows) if (!categoryOf(rowTitle(r))) r.removeAttribute('data-ds-sub-hidden')
 }
 
+// "Move to subsection…" in a session's own menu, after Claude's Move to items. It lists the section's
+// subsections, takes a new one's name, or clears it; the session is renamed "category / topic" to match.
+function sectionCategories(list) {
+  const cats = new Set()
+  for (const r of list?.querySelectorAll('[data-row-key]:not([data-row-key^="label:"])') || []) { const c = categoryOf(rowTitle(r)); if (c) cats.add(c) }
+  return [...cats].sort((a, b) => a.localeCompare(b))
+}
+function moveToSubsection(row, anchor) {
+  const key = row.getAttribute('data-row-key')
+  const { icon, text } = splitName(rowTitle(row))
+  const i = text.indexOf(' / ')
+  const current = i > 0 ? text.slice(0, i).trim() : null
+  const topic = i > 0 ? text.slice(i + 3).trim() : text
+  const named = cat => `${icon ? icon + ' ' : ''}${cat ? cat + ' / ' : ''}${topic}`
+  popMenu(anchor, m => {
+    const cats = sectionCategories(row.closest('[data-group-list]'))
+    if (cats.length) {
+      const h = document.createElement('div'); h.setAttribute('data-ds-heading', ''); h.textContent = 'Subsections'; m.append(h)
+      for (const c of cats) item(m, c === current ? `${c}  ✓` : c, 'caret', () => { if (c !== current) renameSession(key, named(c)) })
+      m.append(document.createElement('hr'))
+    }
+    const input = document.createElement('input')
+    input.placeholder = 'New subsection'
+    input.setAttribute('aria-label', 'New subsection')
+    input.onkeydown = e => {
+      if (e.key !== 'Enter') return
+      e.preventDefault()
+      const c = input.value.trim().replace(/\s*\/\s*/g, ' ')
+      if (c) { closeMenus(); renameSession(key, named(c)) }
+    }
+    m.append(input)
+    if (current) { m.append(document.createElement('hr')); item(m, 'No subsection', 'more', () => renameSession(key, named(null))) }
+  })
+  // straight to typing when the section has no subsections yet
+  setTimeout(() => { const m = document.querySelector('[data-ds-menu]'); if (m && !m.querySelector('[data-ds-heading]')) m.querySelector('input')?.focus() })
+}
+function decorateRowMenu() {
+  for (const menu of document.querySelectorAll('[role="menu"]')) {
+    if (menu.querySelector('[data-ds-menuitem]')) continue
+    const trigger = document.getElementById(menu.getAttribute('aria-labelledby') || '')
+    const row = trigger?.closest('aside [data-row-key]')
+    if (!row || /^label:/.test(row.getAttribute('data-row-key')) || !row.closest('[data-group-list]')) continue
+    const after = menu.querySelector('[data-testid="move-to-group-trigger"]')
+    const after2 = after?.nextElementSibling?.matches('[role="menuitem"]') ? after.nextElementSibling : after
+    const model = [...menu.querySelectorAll('[role="menuitem"]')].find(e => /^Rename/.test(e.textContent.trim()))
+    if (!after2 || !model) continue
+    const mine = model.cloneNode(true)
+    mine.removeAttribute('id'); mine.removeAttribute('aria-keyshortcuts'); mine.removeAttribute('data-highlighted')
+    mine.setAttribute('data-ds-menuitem', '')
+    mine.querySelectorAll('kbd, [data-cds="Shortcut"]').forEach(k => k.remove())
+    const textNode = [...mine.querySelectorAll('*')].reverse().find(e => e.children.length === 0 && /Rename/.test(e.textContent))
+    if (textNode) textNode.textContent = 'Move to subsection…'
+    mine.onclick = e => {
+      e.preventDefault(); e.stopPropagation()
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      setTimeout(() => moveToSubsection(row, row), 60)
+    }
+    after2.after(mine)
+  }
+}
+
 function render(aside) {
   // the rail lives on the window frame, not in the sidebar: closed, Claude shrinks the sidebar to its toolbar
   const host = aside.closest('.dframe-root') || aside.parentElement
@@ -547,8 +614,11 @@ function start() {
     decorateRename()
     if (aside) groupSubsections(aside.getAttribute('data-ds-lane') || 'home')
     decorateSessionRename()
+    decorateRowMenu()
   }
-  new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(tick) } })
+  // next frame, or a timer when the window is in the background and frames are paused
+  const run = () => { if (queued) tick() }
+  new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(run); setTimeout(run, 120) } })
     .observe(document.documentElement, { childList: true, subtree: true, characterData: true })
   tick()
 }
