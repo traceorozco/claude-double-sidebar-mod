@@ -78,6 +78,7 @@ You install it at your own risk:
 
 - Claude is signed by a certificate on your Mac instead of by Anthropic.
 - A background agent stays installed to put the sidebar back after Claude updates. `./install.sh --no-agent` leaves it out.
+- Claude's debug port is on by default, at 127.0.0.1:9339, so Claude Code can inspect and work on the sidebar live. While Claude is open, any program on your Mac can read and control Claude through it, including your conversations and your signed-in session. `./install.sh --no-debug-port` installs with it off.
 - It's unofficial. A Claude update, or a change to the claude.ai page, can break the sidebar until the mod catches up. Modifying the app may not be allowed by Anthropic's terms.
 
 `./install.sh --plan` lists every change it would make on your Mac, and changes nothing.
@@ -138,7 +139,9 @@ This removes the background agent, puts back Claude's own files, signs Claude wi
 
 ## Working on the sidebar
 
-The code is `src/sidebar.js`. `node build.mjs` builds it into the sidebar file Claude loads, and reopening Claude shows the change. `node patch.mjs --dev` installs a development build that also opens a debug port on 127.0.0.1:9339, for inspecting the page. Never leave a dev build installed day to day: run `node patch.mjs` to go back.
+The code is `src/sidebar.js`. `node build.mjs` builds it into the sidebar file Claude loads, and reopening Claude shows the change.
+
+With the debug port on, Claude Code can look at the running sidebar and try changes in it live, through 127.0.0.1:9339 (`dev/cdp.mjs` does this). Switch the port with `node patch.mjs --debug-port off` or `on`, then quit and reopen Claude. It's a setting the loader reads each time Claude starts, so switching never re-signs Claude.
 
 `node --test test/patch.test.mjs` tests the patcher against a copy of Claude in a temporary folder: installing, installing again, restoring, failures partway, the signing rules, the background agent after a simulated update, and a Claude it doesn't recognise. It never touches the Claude in /Applications or your own files. It signs with your **Claude Local** certificate, so install the mod once first.
 

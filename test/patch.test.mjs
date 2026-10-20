@@ -12,6 +12,7 @@ import assert from 'node:assert/strict'
 import { spawn, spawnSync, execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, existsSync, readFileSync, renameSync, readdirSync } from 'node:fs'
 import { createHash } from 'node:crypto'
+import vm from 'node:vm'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -73,6 +74,59 @@ test('install patches Claude, signs it and leaves nothing behind', () => {
   assert.deepEqual(leftovers(), [])
   assert.ok(existsSync(join(HOME, 'Library/Application Support/ClaudeDoubleSidebar/sidebar.js')))
   assert.equal(readdirSync(join(HOME, 'Library/Fonts')).filter(f => f.endsWith('.ttf')).length, 4)
+})
+
+// the loader patch.mjs put at the top of Claude's main process entry, read back out of the copy's app.asar
+const loaderLine = () => {
+  const buf = readFileSync(join(APP, 'Contents/Resources/app.asar'))
+  const header = JSON.parse(buf.subarray(16, 16 + buf.readUInt32LE(12)).toString())
+  let n = header
+  for (const p of '.vite/build/index.js'.split('/')) n = n.files[p]
+  const start = 8 + buf.readUInt32LE(4) + Number(n.offset)
+  return buf.subarray(start, start + n.size).toString().split('\n')[0]
+}
+const DEBUG_FILE = join(HOME, 'Library/Application Support/ClaudeDoubleSidebar/debug-port')
+
+test('the loader is valid JavaScript and reads the debug port setting at launch', () => {
+  const line = loaderLine()
+  assert.match(line, /^\/\* claude-double-sidebar loader 2 \*\//)
+  assert.doesNotThrow(() => new vm.Script(line))
+  assert.ok(line.includes(JSON.stringify(DEBUG_FILE)))
+  assert.match(line, /remote-debugging-address","127\.0\.0\.1"/)
+})
+
+test('a first install turns the debug port on, and a choice to switch it off stays', () => {
+  assert.equal(readFileSync(DEBUG_FILE, 'utf8').trim(), 'on')
+  const off = patch(['--debug-port', 'off'])
+  assert.equal(off.status, 0, off.out)
+  assert.match(off.out, /Debug port: off/)
+  assert.equal(patch().status, 0)
+  assert.equal(readFileSync(DEBUG_FILE, 'utf8').trim(), 'off')
+  assert.equal(patch(['--debug-port', 'on']).status, 0)
+  assert.equal(readFileSync(DEBUG_FILE, 'utf8').trim(), 'on')
+  assert.equal(patch(['--debug-port', 'maybe']).status, 2)
+})
+
+test('the loader opens the debug port only when the setting is on', () => {
+  // runs the loader against a stand-in for Electron, as Claude's main process would at launch
+  const launch = () => {
+    const switches = [], pages = []
+    const app = { commandLine: { appendSwitch: (k, v) => switches.push([k, v]) }, on: (_, f) => pages.push(f) }
+    const require = m => (m === 'electron' ? { app } : m === 'fs' ? { readFileSync } : null)
+    new vm.Script(loaderLine()).runInNewContext({ require, console })
+    // a claude.ai page loading: which world the sidebar runs in
+    const ran = []
+    const wc = { getURL: () => 'https://claude.ai/new', on: (_, f) => f(),
+      executeJavaScript: () => (ran.push('page'), Promise.resolve()),
+      executeJavaScriptInIsolatedWorld: () => (ran.push('isolated'), Promise.resolve()) }
+    pages.forEach(f => f(null, wc))
+    return { switches, ran }
+  }
+  assert.equal(patch(['--debug-port', 'on']).status, 0)
+  assert.deepEqual(launch(), { switches: [['remote-debugging-port', '9339'], ['remote-debugging-address', '127.0.0.1']], ran: ['page'] })
+  assert.equal(patch(['--debug-port', 'off']).status, 0)
+  assert.deepEqual(launch(), { switches: [], ran: ['isolated'] })
+  assert.equal(patch(['--debug-port', 'on']).status, 0)
 })
 
 test('installing again only replaces the sidebar file', () => {

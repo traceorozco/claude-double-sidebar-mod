@@ -2,7 +2,7 @@
 // file (built from src/sidebar.js) inside the real claude.ai page on every page load, not over it.
 //
 //   node patch.mjs               install or update the sidebar; re-signs Claude only when its loader needs it
-//   node patch.mjs --dev         for working on it, never ship: the same, plus a debug port on 127.0.0.1:9339
+//   node patch.mjs --debug-port on|off   whether Claude opens its debug port on 127.0.0.1:9339 from its next launch
 //   node patch.mjs --state       prints needs-patch or installed; exits 2, saying why, if it can't read Claude
 //   node patch.mjs --plan        list every change an install would make, and change nothing
 //   node patch.mjs --restore     put back the app.asar this patcher saved before its first change
@@ -32,8 +32,12 @@ const ASAR = 'Contents/Resources/app.asar'
 const PLIST = 'Contents/Info.plist'
 const BACKUP = ASAR + '.original'
 const ENTRY = '.vite/build/index.js'
-const dev = process.argv.includes('--dev')
-const LOADER = `/* claude-double-sidebar loader 1${dev ? ' dev' : ''} */`
+const LOADER = '/* claude-double-sidebar loader 2 */'
+// "on" or "off", read by the loader each time Claude starts: whether to open the debug port, so switching
+// it needs only a restart of Claude, never a re-patch
+const DEBUG_FILE = join(dirname(SIDEBAR_FILE), 'debug-port')
+const DEBUG_PORT = 9339
+const debugOn = () => { try { return readFileSync(DEBUG_FILE, 'utf8').trim() === 'on' } catch { return false } }
 // Anthropic's team. Claude is signed so that either the local signature or Anthropic's satisfies it, which
 // lets Claude's own updater install Anthropic's updates over the patched app
 const ANTHROPIC_TEAM = 'Q6L2SF6YDW'
@@ -255,6 +259,9 @@ function install() {
   // the sidebar, built and put where the loader reads it
   build()
   console.log(`Sidebar installed at ${SIDEBAR_FILE}`)
+  // the debug port is on unless it has been switched off: a first install turns it on
+  if (!existsSync(DEBUG_FILE)) writeFileSync(DEBUG_FILE, 'on\n')
+  console.log(debugStatus())
 
   // the icon fonts Claude's sidebar draws section names with (they stand in for fonts it asks for)
   const fonts = join(here, 'vendor/claude-sidebar-icons/fonts'), userFonts = join(USER_HOME, 'Library/Fonts')
@@ -278,23 +285,22 @@ function install() {
     const src = readFileSync(backup)
     const { header, dataStart } = readAsar(src)
 
-    // The loader, at the top of Claude's main process: on each claude.ai page load it reads the sidebar
-    // file and runs it in the page, in a world of its own (the dev build runs it in the page's own world
-    // instead, where the debug port's console can reach it, and opens that port on 127.0.0.1 only)
-    const file = JSON.stringify(SIDEBAR_FILE)
-    const runIt = dev
-      ? 'wc.executeJavaScript(code)'
-      : 'wc.executeJavaScriptInIsolatedWorld(1001,[{code}])'
+    // The loader, at the top of Claude's main process, in a block of its own. At launch it reads the debug
+    // port setting. On each claude.ai page load it reads the sidebar file and runs it in the page: in a
+    // world of its own, or with the debug port on, in the page's own world, where the port's console can
+    // reach it. The port listens on 127.0.0.1 only.
+    const file = JSON.stringify(SIDEBAR_FILE), debugFile = JSON.stringify(DEBUG_FILE)
     const loader = LOADER +
-      (dev ? 'require("electron").app.commandLine.appendSwitch("remote-debugging-port","9339");require("electron").app.commandLine.appendSwitch("remote-debugging-address","127.0.0.1");' : '') +
-      `require("electron").app.on("web-contents-created",(_,wc)=>wc.on("dom-ready",()=>{if(!/^https:\\/\\/claude\\.ai/.test(wc.getURL()))return;let s;try{s=require("fs").readFileSync(${file},"utf8")}catch(e){return console.error("[double-sidebar]",e.message)}const code=";(() => {\\n"+s+"\\n})();";${runIt}.catch(e=>console.error("[double-sidebar]",e))}));\n`
+      `{const fs=require("fs"),app=require("electron").app;let debug=false;try{debug=fs.readFileSync(${debugFile},"utf8").trim()==="on"}catch(e){}` +
+      `if(debug){app.commandLine.appendSwitch("remote-debugging-port","${DEBUG_PORT}");app.commandLine.appendSwitch("remote-debugging-address","127.0.0.1")}` +
+      `app.on("web-contents-created",(_,wc)=>wc.on("dom-ready",()=>{if(!/^https:\\/\\/claude\\.ai/.test(wc.getURL()))return;let s;try{s=fs.readFileSync(${file},"utf8")}catch(e){return console.error("[double-sidebar]",e.message)}const code=";(() => {\\n"+s+"\\n})();";(debug?wc.executeJavaScript(code):wc.executeJavaScriptInIsolatedWorld(1001,[{code}])).catch(e=>console.error("[double-sidebar]",e))}))}\n`
     const entry = node(header, ENTRY)
     const { out, headerHash } = writeAsar(src, header, dataStart, new Map([[entry, Buffer.concat([Buffer.from(loader), bytes(src, dataStart, entry)])]]))
     writeFileSync(asar, out)
     setIntegrity(app, headerHash)
   })
   recordDone()
-  console.log(`Patched Claude ${version} at ${APP}${dev ? ' (dev: debug port 127.0.0.1:9339)' : ''}. Quit and reopen Claude.`)
+  console.log(`Patched Claude ${version} at ${APP}. Quit and reopen Claude.`)
 }
 
 // tells the background agent (agent.mjs) this build of Claude is taken care of
@@ -305,6 +311,17 @@ function recordDone() {
   s.done = plistBuddy('Print :ElectronAsarIntegrity:Resources/app.asar:hash', join(APP, PLIST))
   mkdirSync(SAVED, { recursive: true })
   writeFileSync(f, JSON.stringify(s, null, 2) + '\n')
+}
+
+const debugStatus = () => debugOn()
+  ? `Debug port: on, at 127.0.0.1:${DEBUG_PORT} while Claude is open. Any program on this Mac can read and control Claude through it. To switch it off: node patch.mjs --debug-port off, then quit and reopen Claude.`
+  : `Debug port: off. To switch it on: node patch.mjs --debug-port on, then quit and reopen Claude.`
+
+function setDebugPort(value) {
+  if (!['on', 'off'].includes(value)) refuse('Use --debug-port on or --debug-port off.')
+  mkdirSync(dirname(DEBUG_FILE), { recursive: true })
+  writeFileSync(DEBUG_FILE, value + '\n')
+  console.log(debugStatus())
 }
 
 function restore() {
@@ -325,6 +342,9 @@ function plan() {
   lines.push(`Always:`)
   lines.push(`  - writes the sidebar to ${SIDEBAR_FILE}`)
   lines.push(`  - copies 4 icon fonts (CCSidebarIcons*.ttf, named Segoe UI Symbol, Segoe UI, Roboto and Consolas) to ~/Library/Fonts`)
+  lines.push(debugOn() || !existsSync(DEBUG_FILE)
+    ? `  - ${existsSync(DEBUG_FILE) ? 'keeps' : 'turns'} Claude's debug port on, at 127.0.0.1:${DEBUG_PORT}, so Claude Code can inspect and work on the sidebar live. While Claude is open, any program on this Mac can read and control Claude through it (./install.sh --no-debug-port, or node patch.mjs --debug-port off)`
+    : `  - keeps Claude's debug port off (node patch.mjs --debug-port on switches it on)`)
   lines.push(`  - sets up a background agent, ~/Library/LaunchAgents/local.claude-double-sidebar.plist, that puts the sidebar back after Claude updates, the next time Claude is closed, and tells you in a notification (./install.sh --no-agent leaves it out)`)
   if (!patched) {
     lines.push('', `Claude.app needs the loader, so this run also:`)
@@ -349,6 +369,7 @@ function plan() {
 
 try {
   if (process.argv.includes('--state')) console.log(inspect(APP).patched ? 'installed' : 'needs-patch')
+  else if (process.argv.includes('--debug-port')) setDebugPort(process.argv[process.argv.indexOf('--debug-port') + 1])
   else if (process.argv.includes('--plan')) plan()
   else if (process.argv.includes('--restore')) restore()
   else install()

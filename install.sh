@@ -8,17 +8,21 @@
 #   ./install.sh --plan   list every change it would make, and change nothing
 #   ./install.sh --yes    install or update without asking (quits Claude if it needs to)
 #   ./install.sh --no-agent   without the background agent that puts the sidebar back after Claude updates
+#   ./install.sh --no-debug-port   with Claude's debug port off (it's on by default, so Claude Code can work on
+#                                  the sidebar live; any program on this Mac can then read and control Claude)
 set -e
 cd "$(dirname "$0")"
 
 APP="${CLAUDE_APP:-/Applications/Claude.app}"
-YES=false; PLAN=false; AGENT=true
+YES=false; PLAN=false; AGENT=true; DEBUG=
 for arg in "$@"; do
   case "$arg" in
     --yes|-y) YES=true ;;
     --plan) PLAN=true ;;
     --no-agent) AGENT=false ;;
-    *) echo "Unknown option: $arg (use --plan, --yes or --no-agent)"; exit 1 ;;
+    --no-debug-port) DEBUG=off ;;
+    --debug-port) DEBUG=on ;;
+    *) echo "Unknown option: $arg (use --plan, --yes, --no-agent or --no-debug-port)"; exit 1 ;;
   esac
 done
 
@@ -29,6 +33,9 @@ node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 18 ? 0 : 1)
 command -v codesign >/dev/null || { echo "This needs Apple's command line tools. Run: xcode-select --install"; exit 1; }
 
 if $PLAN; then node patch.mjs --plan; exit 0; fi
+
+# the debug port setting, if one was asked for; the loader reads it each time Claude starts
+[ -n "$DEBUG" ] && node patch.mjs --debug-port "$DEBUG" >/dev/null
 
 # needs-patch or installed; anything else means Claude couldn't be read, and patch.mjs has said why
 state=$(node patch.mjs --state) || exit 1
@@ -55,7 +62,6 @@ if [ "$state" = needs-patch ]; then
     for _ in $(seq 1 30); do pgrep -xq Claude || break; sleep 0.5; done
     pgrep -xq Claude && { echo "Claude is still open. Quit it and run this again."; exit 1; }
   fi
-  # the final build only: --dev opens a debug port and is for working on the sidebar itself
   # if it stops, Claude is as it was: reopen it either way
   node patch.mjs || { open -a "$APP"; exit 1; }
   $AGENT && node agent.mjs --install
