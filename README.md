@@ -58,7 +58,7 @@ A double sidebar for the Claude desktop app on macOS, in Chat, Cowork and Code, 
 </tr>
 </table>
 
-<p align="center"><img src="docs/screenshots/new-section-dialog.png" alt="Claude's New section dialog with an icon picker under the name" width="420"></p>
+<p align="center"><img src="docs/screenshots/new-section-dialog.png" alt="Claude's New section dialog with an icon picker, over the sidebar and its rail" width="640"></p>
 
 <p align="center"><em>Making a section: name it and pick its icon in Claude's own dialog.</em></p>
 
