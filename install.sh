@@ -28,9 +28,12 @@ command -v codesign >/dev/null || { echo "This needs Apple's command line tools.
 
 if $PLAN; then node patch.mjs --plan; exit 0; fi
 
+# needs-patch or installed; anything else means Claude couldn't be read, and patch.mjs has said why
+state=$(node patch.mjs --state) || exit 1
+
 # Run from inside Claude for Desktop (by Claude, or in its terminal), quitting Claude would stop this
 # partway. So when Claude needs patching, the install moves to a Terminal window, which outlives Claude.
-if [ "${__CFBundleIdentifier:-}" = com.anthropic.claudefordesktop ] && node patch.mjs --needs-patch; then
+if [ "${__CFBundleIdentifier:-}" = com.anthropic.claudefordesktop ] && [ "$state" = needs-patch ]; then
   run="${TMPDIR:-/tmp}/claude-double-sidebar-install.command"
   args=""; for a in "$@"; do args+=" $(printf %q "$a")"; done
   printf '#!/bin/bash\ncd %q && ./install.sh%s\n' "$PWD" "$args" > "$run"
@@ -40,7 +43,7 @@ if [ "${__CFBundleIdentifier:-}" = com.anthropic.claudefordesktop ] && node patc
   exit 0
 fi
 
-if node patch.mjs --needs-patch; then
+if [ "$state" = needs-patch ]; then
   if pgrep -xq Claude; then
     if ! $YES; then
       read -r -p "Claude needs to quit while it's patched. Quit it now? [y/N] " answer
@@ -51,10 +54,10 @@ if node patch.mjs --needs-patch; then
     pgrep -xq Claude && { echo "Claude is still open. Quit it and run this again."; exit 1; }
   fi
   # the final build only: --dev opens a debug port and is for working on the sidebar itself
-  node patch.mjs
+  # if it stops, Claude is as it was: reopen it either way
+  node patch.mjs || { open -a "$APP"; exit 1; }
   echo "Opening Claude. If macOS asks about \"Claude Safe Storage\", choose Always Allow."
   open -a "$APP"
 else
   node patch.mjs
-  echo "Quit and reopen Claude to load the updated sidebar."
 fi

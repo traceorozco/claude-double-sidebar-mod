@@ -6,8 +6,10 @@ import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
+// the home folder the sidebar file, fonts and saved files go in (the tests point it at a temporary folder)
+export const USER_HOME = process.env.DOUBLE_SIDEBAR_HOME || homedir()
 // where Claude's loader reads the sidebar on every page load
-export const SIDEBAR_FILE = join(homedir(), 'Library/Application Support/ClaudeDoubleSidebar/sidebar.js')
+export const SIDEBAR_FILE = join(USER_HOME, 'Library/Application Support/ClaudeDoubleSidebar/sidebar.js')
 
 export function build() {
   const tsv = readFileSync(join(here, 'vendor/claude-sidebar-icons/icons.tsv'), 'utf8').trim().split('\n').slice(1)

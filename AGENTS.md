@@ -7,7 +7,7 @@ You've been asked to install Claude Double Sidebar mod, an unofficial modificati
 Run `./install.sh --plan`. It lists every change for this Mac and changes nothing. In short:
 
 - **Every install** writes the sidebar to `~/Library/Application Support/ClaudeDoubleSidebar/sidebar.js` and copies four icon fonts (`CCSidebarIcons*.ttf`) to `~/Library/Fonts`. The fonts carry the family names Segoe UI Symbol, Segoe UI, Roboto and Consolas, which Claude's sidebar asks for and macOS lacks. That is how the icons appear in Claude.
-- **The first install, and the first after each Claude update**, also patches `/Applications/Claude.app`:
+- **The first install, and the first after each Claude update**, also patches `/Applications/Claude.app`. It makes every change below to a copy of Claude.app beside it, signs and checks the copy, then swaps it in. If any step fails, Claude is left as it was:
   - saves the original `Contents/Resources/app.asar` as `app.asar.original`
   - adds a loader to the top of `.vite/build/index.js` inside `app.asar`. On each claude.ai page load it reads the sidebar file and runs it in that page
   - updates the `app.asar` fingerprint in `Contents/Info.plist`
@@ -24,9 +24,10 @@ Small, readable files:
 |---|---|
 | `src/sidebar.js` | The sidebar. Reads and rearranges Claude's sidebar in the page, keeps a few settings in the page's `localStorage`. |
 | `build.mjs` | Fills the icon table into the sidebar and writes the sidebar file. |
-| `patch.mjs` | The archive rewrite, fingerprint, certificate and signing. Runs only local tools: `codesign`, `security`, `openssl`, `PlistBuddy`. |
+| `patch.mjs` | The archive rewrite, fingerprint, certificate, signing and the swap. Runs only local tools: `codesign`, `security`, `openssl`, `PlistBuddy`, `ditto`. |
 | `install.sh`, `uninstall.sh` | Checks, then call `patch.mjs`. |
 | `vendor/claude-sidebar-icons/` | The icon fonts and their list, with licences. |
+| `test/` | Tests for `patch.mjs`, run against a copy of Claude in a temporary folder. Not used by the install. |
 | `dev/` | Tools for working on the sidebar. Not used by the install. |
 
 Quick checks:
@@ -53,12 +54,12 @@ Show them the output of `./install.sh --plan`, and install only after they say y
 
 - **The command**, once they've agreed: `./install.sh --yes`. `--yes` skips the installer's own "quit Claude?" question, since they've already answered it.
 - **In a terminal** (Claude Code in Terminal, or any agent outside Claude for Desktop), it runs start to finish.
-- **Inside Claude for Desktop** (Claude Code in its Code tab, or its terminal panel), quitting Claude would stop the install partway. So when Claude needs patching (`node patch.mjs --needs-patch` exits 0), the installer opens a Terminal window, carries on there and exits straight away. Claude then quits, and your session with it. Before you run it, tell the person: Claude will close, the install finishes in Terminal and reopens Claude, and they can come back to this conversation then. A sidebar-only update stays where it is and doesn't quit Claude. `./uninstall.sh` moves to Terminal the same way.
+- **Inside Claude for Desktop** (Claude Code in its Code tab, or its terminal panel), quitting Claude would stop the install partway. So when Claude needs patching (`node patch.mjs --state` prints `needs-patch`), the installer opens a Terminal window, carries on there and exits straight away. Claude then quits, and your session with it. Before you run it, tell the person: Claude will close, the install finishes in Terminal and reopens Claude, and they can come back to this conversation then. A sidebar-only update stays where it is and doesn't quit Claude. `./uninstall.sh` moves to Terminal the same way.
 - **macOS prompts are theirs.** The first time, macOS may ask for the login keychain password (to add the certificate), whether Claude may use "Claude Safe Storage" (choose **Always Allow**), and for them to sign in to Claude again. You can't answer these. Tell them to expect them.
 
 ## Checking it worked
 
-- `node patch.mjs --needs-patch` exits 1: Claude has the loader.
+- `node patch.mjs --state` prints `installed`. It prints `needs-patch` if Claude has no loader, and exits 2 with the reason if it can't read Claude.
 - `codesign --verify --strict /Applications/Claude.app` succeeds.
 - `~/Library/Application Support/ClaudeDoubleSidebar/sidebar.js` exists.
 - After Claude reopens, a rail of icons runs down the left edge of its sidebar.

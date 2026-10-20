@@ -64,6 +64,8 @@ Claude's sidebar is part of the claude.ai page the app loads. The patch adds a s
 
 Claude checks its files against a fingerprint in its signed settings, so the patch updates the fingerprint and signs Claude again with a certificate on your Mac called **Claude Local**, which the installer makes the first time. The same certificate every time keeps macOS's keychain and privacy permissions for Claude in place across installs.
 
+The patch works on a copy of Claude.app beside it, signs and checks the copy, then swaps it in. If any step fails, Claude is left as it was. It checks first that Claude is laid out the way it expects, and stops before changing anything if not. It has been used on Claude 2.42304.2.
+
 ## Before you install
 
 You install it at your own risk:
@@ -120,6 +122,8 @@ This puts back Claude's own files, signs Claude with your certificate and remove
 ## Working on the sidebar
 
 The code is `src/sidebar.js`. `node build.mjs` builds it into the sidebar file Claude loads, and reopening Claude shows the change. `node patch.mjs --dev` installs a development build that also opens a debug port on 127.0.0.1:9339, for inspecting the page. Never leave a dev build installed day to day: run `node patch.mjs` to go back.
+
+`node --test test/patch.test.mjs` tests the patcher against a copy of Claude in a temporary folder: installing, installing again, restoring, failures partway and a Claude it doesn't recognise. It never touches the Claude in /Applications or your own files. It signs with your **Claude Local** certificate, so install the mod once first.
 
 ## Licences
 

@@ -39,9 +39,10 @@ if pgrep -xq Claude; then
   fi
   osascript -e 'quit app "Claude"'
   for _ in $(seq 1 30); do pgrep -xq Claude || break; sleep 0.5; done
+  pgrep -xq Claude && { echo "Claude is still open. Quit it and run this again."; exit 1; }
 fi
 
-node patch.mjs --restore
+node patch.mjs --restore || { open -a "$APP"; exit 1; }
 rm -rf "$HOME/Library/Application Support/ClaudeDoubleSidebar"
 if $FONTS; then
   rm -f "$HOME"/Library/Fonts/CCSidebarIcons*.ttf
