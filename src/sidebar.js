@@ -36,7 +36,9 @@ const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d }
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} }
 
 const STYLE = `
-aside.dframe-sidebar[data-ds] > .dframe-sidebar-body { margin-inline-start: ${RAIL_W}px; }
+/* room for the rail as padding, not margin: the body clips what leaves its box, and the footer below
+   reaches back over the rail to the window's edge */
+aside.dframe-sidebar[data-ds] > .dframe-sidebar-body { padding-inline-start: calc(${RAIL_W}px + 0.5rem); }
 /* one rule under the header, across the rail and the sidebar */
 aside.dframe-sidebar[data-ds] > .df-titlebar { box-shadow: inset 0 -1px 0 var(--ds-line); }
 /* the footer (account, settings) runs to the window's left edge like the header; the rail stops above it */
