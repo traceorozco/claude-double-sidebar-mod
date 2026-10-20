@@ -419,7 +419,41 @@ function decorateSessionRename() {
 // section's view its sessions are ordered under one collapsible heading per category, sessions with no
 // category first. Claude's rows are only reordered (CSS order) and hidden, never moved or rewritten.
 const KEY_COLLAPSED = 'doubleSidebar.collapsedSubsections'
-const rowTitle = row => (row.querySelector('[data-row-label]')?.innerText || '').split('\n')[0].trim()
+// the session's full title: its ··· button names it, and still does while the shown label is shortened
+function rowTitle(row) {
+  const more = row.querySelector('button[aria-label^="More options for "]')?.getAttribute('aria-label')
+  return more ? more.slice('More options for '.length).trim() : (row.querySelector('[data-row-label]')?.innerText || '').split('\n')[0].trim()
+}
+// Inside its subsection a session reads without the category: "output / sketches" shows as "sketches".
+// Display only, on the label's own text node; the title itself is untouched and comes back on leaving.
+const fullText = new WeakMap()
+function labelText(row) {
+  const label = row.querySelector('[data-row-label]')
+  if (!label) return null
+  const walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT)
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) if (fullText.has(n) || / \/ /.test(n.nodeValue)) return n
+  return null
+}
+function shortenLabel(row, on) {
+  const node = labelText(row)
+  if (!node) return
+  const full = fullText.get(node)
+  // Claude rewrote it (a rename): what it holds now is the full text
+  const current = full && node.nodeValue !== full.short ? null : full
+  if (!current && fullText.has(node)) fullText.delete(node)
+  if (on) {
+    const original = current ? current.original : node.nodeValue
+    const { icon, text } = splitName(original)
+    const i = text.indexOf(' / ')
+    if (i < 0) return
+    const short = `${icon ? icon + ' ' : ''}${text.slice(i + 3)}`
+    if (node.nodeValue !== short) node.nodeValue = short
+    fullText.set(node, { original, short })
+  } else if (current) {
+    node.nodeValue = current.original
+    fullText.delete(node)
+  }
+}
 function categoryOf(title) {
   const { text } = splitName(title)
   const i = text.indexOf(' / ')
@@ -431,6 +465,7 @@ function clearSubsections(list) {
   list.removeAttribute('data-ds-grouped')
   list.querySelectorAll('[data-ds-sub]').forEach(h => h.remove())
   for (const el of list.querySelectorAll('[data-ds-sub-hidden]')) el.removeAttribute('data-ds-sub-hidden')
+  for (const r of list.querySelectorAll('[data-row-key]')) shortenLabel(r, false)
   for (const el of flexItems(list)) el.style.removeProperty('order')
 }
 function groupSubsections(lane) {
@@ -482,11 +517,11 @@ function groupSubsections(lane) {
     const count = String(cats.get(name).length)
     if (head.lastChild.textContent !== count) head.lastChild.textContent = count
     setOrder(head, o)
-    for (const r of cats.get(name)) { setOrder(r, o + 1); r.toggleAttribute('data-ds-sub-hidden', shut) }
+    for (const r of cats.get(name)) { setOrder(r, o + 1); r.toggleAttribute('data-ds-sub-hidden', shut); shortenLabel(r, true) }
     o += 10
   }
   for (const h of list.querySelectorAll(':scope > [data-ds-sub]')) if (!cats.has(h.dataset.name)) h.remove()
-  for (const r of rows) if (!categoryOf(rowTitle(r))) r.removeAttribute('data-ds-sub-hidden')
+  for (const r of rows) if (!categoryOf(rowTitle(r))) { r.removeAttribute('data-ds-sub-hidden'); shortenLabel(r, false) }
 }
 
 // "Move to subsection…" in a session's own menu, after Claude's Move to items. It lists the section's
