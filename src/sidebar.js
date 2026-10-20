@@ -38,6 +38,9 @@ const STYLE = `
 aside.dframe-sidebar[data-ds] > .dframe-sidebar-body { margin-inline-start: ${RAIL_W}px; }
 /* one rule under the header, across the rail and the sidebar */
 aside.dframe-sidebar[data-ds] > .df-titlebar { box-shadow: inset 0 -1px 0 var(--ds-line); }
+/* the footer (account, settings) runs to the window's left edge like the header; the rail stops above it */
+aside.dframe-sidebar[data-ds] > .dframe-sidebar-body .df-bottom-tray { margin-inline-start: -${RAIL_W}px; }
+.dframe-root[data-ds-host]:not([data-ds-closed]) > [data-ds-rail] { bottom: var(--ds-foot, 0px); }
 .dframe-root[data-ds-closed] > main.dframe-content { left: ${RAIL_W}px !important; }
 .dframe-root[data-ds-closed] > [data-ds-rail] { border-top: 1px solid var(--ds-line); }
 /* the account avatar at the rail's foot, only while the sidebar (and its footer) is closed */
@@ -552,6 +555,10 @@ function render(aside) {
   const host = aside.closest('.dframe-root') || aside.parentElement
   host.setAttribute('data-ds-host', '')
   host.toggleAttribute('data-ds-closed', !!document.querySelector('button[aria-label="Show sidebar"]'))
+  // the footer's height, so the rail can stop above it while the sidebar is open
+  const tray = aside.querySelector('.df-bottom-tray')
+  const foot = tray ? `${Math.round(window.innerHeight - tray.getBoundingClientRect().top)}px` : '0px'
+  if (host.style.getPropertyValue('--ds-foot') !== foot) host.style.setProperty('--ds-foot', foot)
   // the rail's tint sits on the sidebar's own colour, read off it (Claude paints it, not the frame)
   const bg = getComputedStyle(aside).backgroundColor
   if (bg && bg !== 'rgba(0, 0, 0, 0)' && host.style.getPropertyValue('--ds-rail-base') !== bg) host.style.setProperty('--ds-rail-base', bg)
