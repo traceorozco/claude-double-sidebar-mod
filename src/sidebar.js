@@ -37,14 +37,17 @@ const STYLE = `
 aside.dframe-sidebar[data-ds] > .dframe-sidebar-body { margin-inline-start: ${RAIL_W}px; }
 /* one rule under the header, across the rail and the sidebar */
 aside.dframe-sidebar[data-ds] > .df-titlebar { box-shadow: inset 0 -1px 0 var(--ds-line); }
-aside.dframe-sidebar[data-ds] { --ds-line: rgb(0 0 0 / .08); --ds-rail: rgb(0 0 0 / .028); --ds-hover: rgb(0 0 0 / .05); --ds-on: rgb(0 0 0 / .085);
+.dframe-root[data-ds-closed] > main.dframe-content { left: ${RAIL_W}px !important; }
+.dframe-root[data-ds-closed] > [data-ds-rail] { border-top: 1px solid var(--ds-line); }
+.dframe-root[data-ds-host] { --ds-line: rgb(0 0 0 / .08); --ds-rail: rgb(0 0 0 / .028); --ds-hover: rgb(0 0 0 / .05); --ds-on: rgb(0 0 0 / .085);
   --ds-menu: #fff; --ds-menu-ink: #3d3d3a; --ds-menu-line: #d7d7d5; --ds-tip: #1f1e1d; --ds-tip-ink: #fff; }
-[data-mode="dark"] > aside.dframe-sidebar[data-ds], aside.dframe-sidebar[data-ds][data-mode="dark"] { --ds-line: rgb(255 255 255 / .08); --ds-rail: rgb(0 0 0 / .2);
+[data-mode="dark"] .dframe-root[data-ds-host], .dframe-root[data-ds-host][data-mode="dark"] { --ds-line: rgb(255 255 255 / .08); --ds-rail: rgb(0 0 0 / .2);
   --ds-hover: rgb(255 255 255 / .06); --ds-on: rgb(255 255 255 / .1); --ds-menu: #30302e; --ds-menu-ink: #e8e6dc; --ds-menu-line: rgb(255 255 255 / .1);
   --ds-tip: #f5f4ee; --ds-tip-ink: #1f1e1d; }
 /* each glyph carries 0.28em of blank space after its drawing: shifted by half of it, the drawing sits centred */
 [data-ds-glyph] { display: inline-block; font-family: ${ICON_FONT}; font-style: normal; font-weight: 400; line-height: 1; transform: translateX(0.14em); }
-[data-ds-rail] { box-sizing: border-box; position: absolute; inset-inline-start: 0; top: 46px; bottom: 0; width: ${RAIL_W}px; background: var(--ds-rail);
+[data-ds-rail] { box-sizing: border-box; position: absolute; z-index: 40; inset-inline-start: 0; top: 46px; bottom: 0; width: ${RAIL_W}px;
+  background: color-mix(in srgb, var(--ds-rail-base, #f9f9f7), black 2.8%);
   display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0;
   border-inline-end: 1px solid var(--ds-line); overflow-y: auto; scrollbar-width: none; }
 [data-ds-rail] button { all: unset; box-sizing: border-box; flex: none; width: 32px; height: 32px; border-radius: 8px;
@@ -118,7 +121,7 @@ function showTip(anchor, text, place = 'right') {
     tip ??= Object.assign(document.createElement('div'), { role: 'tooltip' })
     tip.setAttribute('data-ds-tip', '')
     tip.textContent = text
-    ;(anchor.closest('[role="dialog"]') || document.querySelector('aside.dframe-sidebar') || document.body).append(tip)
+    ;(anchor.closest('[role="dialog"]') || document.querySelector('.dframe-root[data-ds-host]') || document.body).append(tip)
     const r = anchor.getBoundingClientRect()
     if (place === 'top') {
       tip.style.left = `${Math.max(4, Math.min(r.left + r.width / 2 - tip.offsetWidth / 2, innerWidth - tip.offsetWidth - 4))}px`
@@ -141,7 +144,7 @@ function popMenu(anchor, fill, { picker = false, keepFocus = false } = {}) {
   if (picker) m.setAttribute('data-picker', '')
   fill(m)
   // inside the aside so Claude's theme variables reach it
-  ;(document.querySelector('aside.dframe-sidebar') || document.body).append(m)
+  ;(document.querySelector('.dframe-root[data-ds-host]') || document.body).append(m)
   const r = anchor.getBoundingClientRect()
   m.style.left = `${Math.min(r.right + 6, innerWidth - m.offsetWidth - 8)}px`
   m.style.top = `${Math.max(8, Math.min(r.top, innerHeight - m.offsetHeight - 8))}px`
@@ -385,8 +388,16 @@ function decorateSessionRename() {
 }
 
 function render(aside) {
-  let rail = aside.querySelector(':scope > [data-ds-rail]')
-  if (!rail) { rail = document.createElement('nav'); rail.setAttribute('data-ds-rail', ''); rail.setAttribute('aria-label', 'Sections'); aside.append(rail) }
+  // the rail lives on the window frame, not in the sidebar: closed, Claude shrinks the sidebar to its toolbar
+  const host = aside.closest('.dframe-root') || aside.parentElement
+  host.setAttribute('data-ds-host', '')
+  host.toggleAttribute('data-ds-closed', !!document.querySelector('button[aria-label="Show sidebar"]'))
+  // the rail's tint sits on the sidebar's own colour, read off it (Claude paints it, not the frame)
+  const bg = getComputedStyle(aside).backgroundColor
+  if (bg && bg !== 'rgba(0, 0, 0, 0)' && host.style.getPropertyValue('--ds-rail-base') !== bg) host.style.setProperty('--ds-rail-base', bg)
+  let rail = host.querySelector(':scope > [data-ds-rail]')
+  if (!rail) { rail = document.createElement('nav'); rail.setAttribute('data-ds-rail', ''); rail.setAttribute('aria-label', 'Sections'); host.append(rail) }
+  aside.querySelector(':scope > [data-ds-rail]')?.remove()
   aside.setAttribute('data-ds', '')
   const list = sections()
   let lane = load(KEY_LANE, 'home')
