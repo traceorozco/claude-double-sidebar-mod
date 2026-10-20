@@ -27,6 +27,17 @@ A double sidebar for the Code tab in Claude for Desktop on macOS, drawn inside C
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/rail-home.png" alt="The rail with Home selected and its tooltip"></td>
+<td width="50%"><img src="docs/screenshots/rail-new-section.png" alt="The rail's new-section button and its tooltip"></td>
+</tr>
+<tr>
+<td>The rail shows each section as an icon; hover one for its name. Home, above the divider, shows Claude's whole sidebar: every section plus Recents.</td>
+<td>Your sections sit between the two dividers. The + below them makes a new section, with its icon, in Claude's own New section dialog.</td>
+</tr>
+</table>
+
 The icons are part of the names themselves, a character drawn by the [Claude sidebar icons](https://github.com/traceorozco/claude-sidebar-icons) font, so Claude shows them everywhere it shows a name.
 
 ## How it works
