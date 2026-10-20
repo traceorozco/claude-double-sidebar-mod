@@ -2,6 +2,8 @@
 
 **Unofficial.** Not made by or affiliated with Anthropic.
 
+![Claude with the double sidebar: a rail of section icons beside Claude's own sidebar](docs/screenshots/sidebar-open.webp)
+
 A double sidebar for the Code tab in Claude for Desktop on macOS, drawn inside Claude's own sidebar:
 
 - A rail down the sidebar's left edge with Home and one icon per section. Hover an icon for the section's name.
@@ -9,6 +11,21 @@ A double sidebar for the Code tab in Claude for Desktop on macOS, drawn inside C
 - Right-click a section on the rail for New session, Change icon and Claude's own section options.
 - The + at the foot of the rail makes a new section, with an icon picked in Claude's New section dialog.
 - Icons on sections and sessions: rename one and pick from 244 line icons, with search.
+- Subsections: name a session `research / woodblocks` and it sits under a RESEARCH heading in its section, shown without the prefix. A toggle on the rail switches between Show by subsection and Show all.
+- Close Claude's sidebar and the rail stays, with your account at its foot.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/sidebar-closed.webp" alt="Sidebar closed: the rail stays, with the account avatar at its foot"></td>
+<td width="25%"><img src="docs/screenshots/icon-picker.webp" alt="The icon picker, with search"></td>
+<td width="25%"><img src="docs/screenshots/subsection-toggle.png" alt="The toggle that turns subsections on and off"></td>
+</tr>
+<tr>
+<td>Sidebar closed: the rail stays, with your account at its foot.</td>
+<td>Pick an icon for a section or session, with search.</td>
+<td>Turn subsection grouping on or off.</td>
+</tr>
+</table>
 
 The icons are part of the names themselves, a character drawn by the [Claude sidebar icons](https://github.com/traceorozco/claude-sidebar-icons) font, so Claude shows them everywhere it shows a name.
 
