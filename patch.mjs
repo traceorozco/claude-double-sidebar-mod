@@ -259,8 +259,8 @@ function install() {
   // the sidebar, built and put where the loader reads it
   build()
   console.log(`Sidebar installed at ${SIDEBAR_FILE}`)
-  // the debug port is on unless it has been switched off: a first install turns it on
-  if (!existsSync(DEBUG_FILE)) writeFileSync(DEBUG_FILE, 'on\n')
+  // the debug port stays off unless someone switches it on: a first install writes off
+  if (!existsSync(DEBUG_FILE)) writeFileSync(DEBUG_FILE, 'off\n')
   console.log(debugStatus())
 
   // the icon fonts Claude's sidebar draws section names with (they stand in for fonts it asks for)
@@ -342,9 +342,9 @@ function plan() {
   lines.push(`Always:`)
   lines.push(`  - writes the sidebar to ${SIDEBAR_FILE}`)
   lines.push(`  - copies 4 icon fonts (CCSidebarIcons*.ttf, named Segoe UI Symbol, Segoe UI, Roboto and Consolas) to ~/Library/Fonts`)
-  lines.push(debugOn() || !existsSync(DEBUG_FILE)
-    ? `  - ${existsSync(DEBUG_FILE) ? 'keeps' : 'turns'} Claude's debug port on, at 127.0.0.1:${DEBUG_PORT}, so Claude Code can inspect and work on the sidebar live. While Claude is open, any program on this Mac can read and control Claude through it (./install.sh --no-debug-port, or node patch.mjs --debug-port off)`
-    : `  - keeps Claude's debug port off (node patch.mjs --debug-port on switches it on)`)
+  lines.push(debugOn()
+    ? `  - keeps Claude's debug port on, at 127.0.0.1:${DEBUG_PORT}, as it's set now. While Claude is open, any program on this Mac can read and control Claude through it (node patch.mjs --debug-port off switches it off)`
+    : `  - keeps Claude's debug port off (./install.sh --debug-port, or node patch.mjs --debug-port on, switches it on for working on the sidebar)`)
   lines.push(`  - sets up a background agent, ~/Library/LaunchAgents/local.claude-double-sidebar.plist, that puts the sidebar back after Claude updates, the next time Claude is closed, and tells you in a notification (./install.sh --no-agent leaves it out)`)
   if (!patched) {
     lines.push('', `Claude.app needs the loader, so this run also:`)

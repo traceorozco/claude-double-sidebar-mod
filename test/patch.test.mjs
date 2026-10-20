@@ -95,7 +95,10 @@ test('the loader is valid JavaScript and reads the debug port setting at launch'
   assert.match(line, /remote-debugging-address","127\.0\.0\.1"/)
 })
 
-test('a first install turns the debug port on, and a choice to switch it off stays', () => {
+test('a first install leaves the debug port off, and a choice to switch it on or off stays', () => {
+  assert.equal(readFileSync(DEBUG_FILE, 'utf8').trim(), 'off')
+  assert.equal(patch(['--debug-port', 'on']).status, 0)
+  assert.equal(patch().status, 0)
   assert.equal(readFileSync(DEBUG_FILE, 'utf8').trim(), 'on')
   const off = patch(['--debug-port', 'off'])
   assert.equal(off.status, 0, off.out)

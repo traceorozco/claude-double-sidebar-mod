@@ -8,8 +8,9 @@
 #   ./install.sh --plan   list every change it would make, and change nothing
 #   ./install.sh --yes    install or update without asking (quits Claude if it needs to)
 #   ./install.sh --no-agent   without the background agent that puts the sidebar back after Claude updates
-#   ./install.sh --no-debug-port   with Claude's debug port off (it's on by default, so Claude Code can work on
-#                                  the sidebar live; any program on this Mac can then read and control Claude)
+#   ./install.sh --debug-port      with Claude's debug port on, so Claude Code can work on the sidebar live. It's
+#                                  off by default: while it's on, any program on this Mac can read and control Claude
+#   ./install.sh --no-debug-port   with it off
 set -e
 cd "$(dirname "$0")"
 
@@ -22,7 +23,7 @@ for arg in "$@"; do
     --no-agent) AGENT=false ;;
     --no-debug-port) DEBUG=off ;;
     --debug-port) DEBUG=on ;;
-    *) echo "Unknown option: $arg (use --plan, --yes, --no-agent or --no-debug-port)"; exit 1 ;;
+    *) echo "Unknown option: $arg (use --plan, --yes, --no-agent, --debug-port or --no-debug-port)"; exit 1 ;;
   esac
 done
 
