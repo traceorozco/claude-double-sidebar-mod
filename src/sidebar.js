@@ -68,7 +68,8 @@ aside.dframe-sidebar[data-ds] > .dframe-sidebar-body .df-bottom-tray { margin-in
 [data-ds-rail] button:hover .df-new-circle { color: var(--cds-text-primary, currentColor); }
 [data-ds-rail] .df-new-circle svg { width: 13px; height: 13px; stroke-width: 2.2; }
 /* sections are categories: their names in capitals, a pixel smaller than Claude's group labels */
-aside.dframe-sidebar [data-group-section^="custom-"] [data-sidebar-group-label] [data-group-name] { text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
+aside.dframe-sidebar :is([data-group-section^="custom-"], [data-pinned-list]) [data-sidebar-group-label] [data-group-name] { text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
+[data-ds-tip][data-caps] { text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
 [data-ds-rail] button:hover { background: var(--ds-hover); color: currentColor; }
 [data-ds-rail] button[aria-pressed="true"] { background: var(--ds-on); color: currentColor; }
 [data-ds-rail] button:focus-visible { outline: 2px solid color-mix(in srgb, currentColor 40%, transparent); outline-offset: 1px; }
@@ -145,12 +146,13 @@ function applyLane(aside, lane) {
 // --- tooltip: a name as Claude's tooltips look, beside the control (the rail) or centred above it (a
 // picker's icons); inside a dialog when the control is in one, so it stacks over the dialog
 let tip, tipTimer
-function showTip(anchor, text, place = 'right') {
+function showTip(anchor, text, place = 'right', caps = false) {
   clearTimeout(tipTimer)
   tipTimer = setTimeout(() => {
     tip ??= Object.assign(document.createElement('div'), { role: 'tooltip' })
     tip.setAttribute('data-ds-tip', '')
     tip.textContent = text
+    tip.toggleAttribute('data-caps', caps)
     ;(anchor.closest('[role="dialog"]') || document.querySelector('.dframe-root[data-ds-host]') || document.body).append(tip)
     const r = anchor.getBoundingClientRect()
     if (place === 'top') {
@@ -474,13 +476,13 @@ const KEY_SUBS = 'doubleSidebar.subsections'
 function groupSubsections(lane) {
   const on = load(KEY_SUBS, true)
   const targets = !on ? [] : lane === 'home'
-    ? [...document.querySelectorAll('aside.dframe-sidebar [data-group-list][data-group-section^="custom-"]')]
+    ? [...document.querySelectorAll('aside.dframe-sidebar :is([data-group-list][data-group-section^="custom-"], [data-pinned-list])')]
     : [groupEl(lane)].filter(Boolean)
-  for (const l of document.querySelectorAll('aside.dframe-sidebar [data-group-list]')) if (!targets.includes(l)) clearSubsections(l)
+  for (const l of document.querySelectorAll('aside.dframe-sidebar :is([data-group-list], [data-pinned-list])')) if (!targets.includes(l)) clearSubsections(l)
   for (const list of targets) groupList(list, lane !== 'home')
 }
 function groupList(list, expand = false) {
-  const id = list.getAttribute('data-group-list')
+  const id = list.getAttribute('data-group-list') || 'pinned'
   // every session of the section, not the first few: Claude's Show more, pressed once per visit. In Home only
   // for a section already showing a subsection, so sections without any keep Claude's short list
   const shownCategorized = () => [...list.querySelectorAll('[data-row-key]:not([data-row-key^="label:"])')].some(r => categoryOf(rowTitle(r)))
@@ -497,8 +499,10 @@ function groupList(list, expand = false) {
   list.setAttribute('data-ds-grouped', '')
   const collapsed = new Set(load(KEY_COLLAPSED, []))
   const setOrder = (el, o) => { if (el.style.order !== String(o)) el.style.order = String(o) }
-  const heading = el => el.matches('[data-row-key^="label:"]') && !el.matches('[data-row-key^="label:showmore:"]')
-  for (const el of items) setOrder(el, heading(el) ? -1 : rows.includes(el) ? 0 : 100000)
+  const heading = el => (el.matches('[data-row-key^="label:"]') && !el.matches('[data-row-key^="label:showmore:"]')) || !!el.querySelector?.(':scope > [data-sidebar-group-label], :scope [data-group-toggle]') && !el.matches('[data-row-key]')
+  // Pinned's leading block (pinned projects) stays right under its heading
+  const leading = el => el.matches('[data-pinned-leading]')
+  for (const el of items) setOrder(el, heading(el) ? -2 : leading(el) ? -1 : rows.includes(el) ? 0 : 100000)
   let o = 10
   const names = [...cats.keys()].sort((a, b) => a.localeCompare(b))
   for (const name of names) {
@@ -622,15 +626,15 @@ function render(aside) {
   if (rail.dataset.sig === sig) return
   rail.dataset.sig = sig
   rail.replaceChildren()
-  const button = (label, content, onClick) => {
+  const button = (label, content, onClick, caps = false) => {
     const b = document.createElement('button')
     b.setAttribute('aria-label', label)
     if (typeof content === 'string') b.innerHTML = svg(content)
     else b.append(content)
     b.onclick = onClick
-    b.onpointerenter = () => showTip(b, label)
+    b.onpointerenter = () => showTip(b, label, 'right', caps)
     b.onpointerleave = hideTip
-    b.onfocus = () => showTip(b, label)
+    b.onfocus = () => showTip(b, label, 'right', caps)
     b.onblur = hideTip
     rail.append(b)
     return b
@@ -639,7 +643,7 @@ function render(aside) {
   button('Home', glyph(HOME), lanePress('home')).setAttribute('aria-pressed', String(lane === 'home'))
   rail.append(document.createElement('hr'))
   for (const s of list) {
-    const b = button(s.text, glyph(s.icon || FOLDER), lanePress(s.id))
+    const b = button(s.text, glyph(s.icon || FOLDER), lanePress(s.id), true)
     b.setAttribute('aria-pressed', String(lane === s.id))
     b.oncontextmenu = e => {
       e.preventDefault()
