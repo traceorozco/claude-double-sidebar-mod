@@ -1,9 +1,13 @@
-// Builds dist/sidebar.js: src/sidebar.js with the icon table filled in from the vendored icons.tsv
+// Builds the sidebar: src/sidebar.js with the icon table filled in from the vendored icons.tsv, written to
+// dist/sidebar.js and to where Claude's loader reads it
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
+// where Claude's loader reads the sidebar on every page load
+export const SIDEBAR_FILE = join(homedir(), 'Library/Application Support/ClaudeDoubleSidebar/sidebar.js')
 
 export function build() {
   const tsv = readFileSync(join(here, 'vendor/claude-sidebar-icons/icons.tsv'), 'utf8').trim().split('\n').slice(1)
@@ -16,10 +20,12 @@ export function build() {
   const out = src.replace('__ICON_TABLE__', JSON.stringify(table))
   mkdirSync(join(here, 'dist'), { recursive: true })
   writeFileSync(join(here, 'dist/sidebar.js'), out)
+  mkdirSync(dirname(SIDEBAR_FILE), { recursive: true })
+  writeFileSync(SIDEBAR_FILE, out)
   return out
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   build()
-  console.log('Built dist/sidebar.js')
+  console.log(`Built dist/sidebar.js and ${SIDEBAR_FILE}`)
 }

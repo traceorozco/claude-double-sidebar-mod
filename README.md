@@ -14,7 +14,7 @@ The icons are part of the names themselves, a character drawn by the [Claude sid
 
 ## How it works
 
-Claude's sidebar is part of the claude.ai page the app loads. The patch adds the sidebar's code to the script Claude runs in that page, so it builds on Claude's real sidebar. Nothing sits on top of Claude: dialogs, menus and Settings work as they always do.
+Claude's sidebar is part of the claude.ai page the app loads. The patch adds a small loader to Claude that runs the sidebar inside that page each time it loads, so it builds on Claude's real sidebar. The sidebar itself is a file outside the app, in `~/Library/Application Support/ClaudeDoubleSidebar/`, so updating it never touches Claude again. Nothing sits on top of Claude: dialogs, menus and Settings work as they always do.
 
 That means changing Claude.app itself. Claude checks its files against a fingerprint in its signed settings, so the patch updates the fingerprint and signs Claude again with a certificate on your Mac called **Claude Local**, which the installer makes the first time. The same certificate every time keeps macOS's keychain and privacy permissions for Claude in place across installs.
 
@@ -41,15 +41,19 @@ The first time, macOS may ask:
 - whether Claude can use **Claude Safe Storage**: choose **Always Allow**
 - you to sign in to Claude again
 
-## After every Claude update
+## Updating
 
-A new Claude replaces the patched one, so the sidebar disappears. Run the installer again:
+Pull the latest and run the installer again:
 
 ```bash
 cd claude-double-sidebar-mod
 git pull
 ./install.sh
 ```
+
+A sidebar update only replaces the sidebar file, so Claude stays open and macOS asks nothing. Quit and reopen Claude to load it.
+
+After a Claude update, the new Claude has no loader, so the sidebar disappears. The same commands patch it again: the installer quits Claude, patches and signs it, and reopens it. macOS asks once more about **Claude Safe Storage**.
 
 ## Uninstall
 
@@ -61,7 +65,7 @@ This puts back Claude's own files and signs it with your certificate. For Claude
 
 ## Working on the sidebar
 
-The code is `src/sidebar.js`. `node patch.mjs --dev` installs a development build: Claude opens a debug port on 127.0.0.1:9339 and reads `dist/sidebar.js` from this folder on every page load, so `node build.mjs` and a reload (⌘R) show a change. Never leave a dev build installed day to day. Run `./install.sh` when you're done.
+The code is `src/sidebar.js`. `node build.mjs` builds it into the sidebar file Claude loads, and reopening Claude shows the change. `node patch.mjs --dev` installs a development build that also opens a debug port on 127.0.0.1:9339, for inspecting the page. Never leave a dev build installed day to day: run `node patch.mjs` to go back.
 
 ## Licences
 

@@ -1,6 +1,7 @@
 #!/bin/bash
-# Installs the double sidebar into Claude for Desktop on this Mac. Run it from Terminal, not from a
-# Claude session: it quits Claude while it patches. Run it again after every Claude update.
+# Installs or updates the double sidebar in Claude for Desktop on this Mac. Run it from Terminal.
+# The first time, and after each Claude update, it patches Claude (and quits it while it does). Any other
+# time it only replaces the sidebar file, and Claude stays open.
 set -e
 cd "$(dirname "$0")"
 
@@ -12,16 +13,19 @@ command -v node >/dev/null || { echo "This needs Node.js 18 or newer: nodejs.org
 node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 18 ? 0 : 1)' || { echo "This needs Node.js 18 or newer. You have $(node -v)."; exit 1; }
 command -v codesign >/dev/null || { echo "This needs Apple's command line tools. Run: xcode-select --install"; exit 1; }
 
-if pgrep -xq Claude; then
-  read -r -p "Claude needs to quit while it's patched. Quit it now? [y/N] " answer
-  [[ "$answer" =~ ^[Yy] ]] || { echo "Nothing changed."; exit 1; }
-  osascript -e 'quit app "Claude"'
-  for _ in $(seq 1 30); do pgrep -xq Claude || break; sleep 0.5; done
-  pgrep -xq Claude && { echo "Claude is still open. Quit it and run this again."; exit 1; }
+if node patch.mjs --needs-patch; then
+  if pgrep -xq Claude; then
+    read -r -p "Claude needs to quit while it's patched. Quit it now? [y/N] " answer
+    [[ "$answer" =~ ^[Yy] ]] || { echo "Nothing changed."; exit 1; }
+    osascript -e 'quit app "Claude"'
+    for _ in $(seq 1 30); do pgrep -xq Claude || break; sleep 0.5; done
+    pgrep -xq Claude && { echo "Claude is still open. Quit it and run this again."; exit 1; }
+  fi
+  # the final build only: --dev opens a debug port and is for working on the sidebar itself
+  node patch.mjs
+  echo "Opening Claude. If macOS asks about \"Claude Safe Storage\", choose Always Allow."
+  open -a "$APP"
+else
+  node patch.mjs
+  echo "Quit and reopen Claude to load the updated sidebar."
 fi
-
-# the final build only: --dev opens a debug port and is for working on the sidebar itself
-node patch.mjs
-
-echo "Opening Claude. If macOS asks about \"Claude Safe Storage\", choose Always Allow."
-open -a "$APP"

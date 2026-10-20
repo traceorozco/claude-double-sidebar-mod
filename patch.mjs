@@ -1,11 +1,10 @@
-// Patches Claude.app so its own sidebar draws the double sidebar: the code in src/sidebar.js is
-// appended to the claude.ai page's loader (mainView.js), so it runs inside the real page, not over it.
+// Patches Claude.app so its own sidebar draws the double sidebar: a loader in Claude runs the sidebar
+// file (built from src/sidebar.js) inside the real claude.ai page on every page load, not over it.
 //
-//   node patch.mjs            install the sidebar
-//   node patch.mjs --dev      for building it, never ship: open a debug port on 127.0.0.1:9339, and load
-//                             dist/sidebar.js from this folder on every page load instead of baking it
-//                             in, so `node build.mjs` and a reload (Cmd+R) show a change without re-patching
-//   node patch.mjs --restore  put back the app.asar this patcher saved before its first change
+//   node patch.mjs               install or update the sidebar; re-signs Claude only when its loader needs it
+//   node patch.mjs --dev         for working on it, never ship: the same, plus a debug port on 127.0.0.1:9339
+//   node patch.mjs --needs-patch exit 0 when Claude needs the loader (and so a restart), 1 when it has it
+//   node patch.mjs --restore     put back the app.asar this patcher saved before its first change
 //
 // Claude checks app.asar against a hash in its signed Info.plist, so the patch rewrites that hash and
 // re-signs the app with a local certificate ("Claude Local", created on first run). Claude's own updates
@@ -17,7 +16,7 @@ import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { tmpdir, homedir } from 'node:os'
-import { build } from './build.mjs'
+import { build, SIDEBAR_FILE } from './build.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const APP = process.env.CLAUDE_APP || '/Applications/Claude.app'
@@ -140,32 +139,53 @@ if (process.argv.includes('--restore')) {
 }
 
 if (!existsSync(ASAR)) { console.error(`No Claude app at ${APP}. Install Claude, or set CLAUDE_APP to where it is.`); process.exit(1) }
-const version = run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', PLIST]).trim()
-// a backup from an older Claude would roll the app back: Claude updated, so this asar is the new original
-if (existsSync(BACKUP) && !readFileSync(ASAR).includes(MARK)) copyFileSync(ASAR, BACKUP)
-if (!existsSync(BACKUP)) copyFileSync(ASAR, BACKUP)
-const src = readFileSync(BACKUP)
-const { header, dataStart } = readAsar(src)
-const read = n => src.subarray(dataStart + Number(n.offset), dataStart + Number(n.offset) + n.size)
+
+// Claude carries a small loader; the sidebar itself is a file outside the app, read on every page load. So
+// a sidebar update only replaces that file, and Claude is re-signed (a new build, which macOS asks about
+// for keychain access) only when the loader is missing or changed: a first install, or a new Claude.
+const LOADER = `/* claude-double-sidebar loader 1${dev ? ' dev' : ''} */`
+const currentEntry = () => {
+  const buf = readFileSync(ASAR)
+  const { header, dataStart } = readAsar(buf)
+  const n = node(header, '.vite/build/index.js')
+  return buf.subarray(dataStart + Number(n.offset), dataStart + Number(n.offset) + n.size).toString()
+}
+const needsPatch = !currentEntry().startsWith(LOADER)
+if (process.argv.includes('--needs-patch')) process.exit(needsPatch ? 0 : 1)
+
+// the sidebar, built and put where the loader reads it
+build()
+console.log(`Sidebar installed at ${SIDEBAR_FILE}`)
 
 // the icon fonts Claude's sidebar draws section names with (they stand in for fonts it asks for)
 const fonts = join(here, 'vendor/claude-sidebar-icons/fonts')
 for (const f of readdirSync(fonts).filter(f => f.endsWith('.ttf'))) copyFileSync(join(fonts, f), join(homedir(), 'Library/Fonts', f))
 
-const replace = new Map()
-const sidebar = build()
-if (dev) {
-  // the app stays as signed while the sidebar changes: the main process reads dist/sidebar.js fresh
-  // each time a claude.ai page loads and runs it there
-  const dist = JSON.stringify(join(here, 'dist/sidebar.js'))
-  const entry = node(header, '.vite/build/index.js')
-  const line = `${MARK}require("electron").app.commandLine.appendSwitch("remote-debugging-port","9339");require("electron").app.commandLine.appendSwitch("remote-debugging-address","127.0.0.1");` +
-    `require("electron").app.on("web-contents-created",(_,wc)=>wc.on("dom-ready",()=>{if(!/^https:\\/\\/claude\\.ai/.test(wc.getURL()))return;let s;try{s=require("fs").readFileSync(${dist},"utf8")}catch(e){return console.error("[double-sidebar]",e.message)}wc.executeJavaScript(";(() => {\\n"+s+"\\n})();").catch(e=>console.error("[double-sidebar]",e))}));\n`
-  replace.set(entry, Buffer.concat([Buffer.from(line), read(entry)]))
-} else {
-  const view = node(header, '.vite/build/mainView.js')
-  replace.set(view, Buffer.concat([read(view), Buffer.from(`\n${MARK}\n;(() => {\n${sidebar}\n})();\n`)]))
+if (!needsPatch) {
+  console.log('Claude already has the loader: nothing to re-sign. Reload Claude (quit and reopen) to see the change.')
+  process.exit(0)
 }
+
+const version = run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', PLIST]).trim()
+// a backup from an older Claude would roll the app back: Claude updated, so this asar is the new original
+if (existsSync(BACKUP) && !readFileSync(ASAR).includes('/* claude-double-sidebar')) copyFileSync(ASAR, BACKUP)
+if (!existsSync(BACKUP)) copyFileSync(ASAR, BACKUP)
+const src = readFileSync(BACKUP)
+const { header, dataStart } = readAsar(src)
+const read = n => src.subarray(dataStart + Number(n.offset), dataStart + Number(n.offset) + n.size)
+
+// The loader, at the top of Claude's main process: on each claude.ai page load it reads the sidebar file
+// and runs it in the page, in a world of its own (the dev build runs it in the page's own world instead,
+// where the debug port's console can reach it, and opens that port on 127.0.0.1 only)
+const file = JSON.stringify(SIDEBAR_FILE)
+const runIt = dev
+  ? 'wc.executeJavaScript(code)'
+  : 'wc.executeJavaScriptInIsolatedWorld(1001,[{code}])'
+const loader = LOADER +
+  (dev ? 'require("electron").app.commandLine.appendSwitch("remote-debugging-port","9339");require("electron").app.commandLine.appendSwitch("remote-debugging-address","127.0.0.1");' : '') +
+  `require("electron").app.on("web-contents-created",(_,wc)=>wc.on("dom-ready",()=>{if(!/^https:\\/\\/claude\\.ai/.test(wc.getURL()))return;let s;try{s=require("fs").readFileSync(${file},"utf8")}catch(e){return console.error("[double-sidebar]",e.message)}const code=";(() => {\\n"+s+"\\n})();";${runIt}.catch(e=>console.error("[double-sidebar]",e))}));\n`
+const entry = node(header, '.vite/build/index.js')
+const replace = new Map([[entry, Buffer.concat([Buffer.from(loader), read(entry)])]])
 
 const { out, headerHash } = writeAsar(src, header, dataStart, replace)
 writeFileSync(ASAR, out)
