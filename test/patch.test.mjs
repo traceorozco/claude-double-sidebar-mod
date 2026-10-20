@@ -254,13 +254,15 @@ test('the agent runs from its own copy, so the cloned folder can be deleted', ()
   // a clone somewhere temporary, set up, then deleted
   const clone = join(dir, 'clone')
   const repo = dirname(PATCH)
-  for (const f of ['agent.mjs', 'patch.mjs', 'build.mjs', 'src', 'vendor']) cpSync(join(repo, f), join(clone, f), { recursive: true })
+  for (const f of ['agent.mjs', 'patch.mjs', 'build.mjs', 'uninstall.sh', 'src', 'vendor']) cpSync(join(repo, f), join(clone, f), { recursive: true })
   const r = spawnSync('node', [join(clone, 'agent.mjs'), '--install'], { env: agentEnv(), encoding: 'utf8' })
   assert.equal(r.status, 0, r.stdout + r.stderr)
   rmSync(clone, { recursive: true, force: true })
 
   const plist = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', AGENT_PLIST]).toString())
   assert.deepEqual(plist.ProgramArguments, ['/bin/sh', LAUNCHER])
+  // and an uninstaller that doesn't need the clone
+  assert.equal(spawnSync('test', ['-x', join(RUNTIME, 'uninstall.sh')]).status, 0)
   assert.equal(realpathSync(readFileSync(join(RUNTIME, 'source'), 'utf8').trim().replace(/\/clone$/, '')), realpathSync(dir))
 
   // a Claude update while Claude is open: the copy works out what's needed and says so
@@ -287,6 +289,30 @@ test('when its patch fails, the agent leaves Claude as it was and does not retry
   assert.deepEqual(leftovers(), [])
 })
 
+test('the uninstaller works from the installed copy: the agent stops, its files stay until Claude is restored', () => {
+  // uninstall.sh's own order, run from the copy, as it would be once the clone is gone
+  assert.equal(patch().status, 0)
+  writeFileSync(join(HOME, 'Library/Logs/claude-double-sidebar.log'), 'a line\n')
+  const stop = spawnSync('node', [join(RUNTIME, 'agent.mjs'), '--remove', '--keep-files'], { env: agentEnv(), encoding: 'utf8' })
+  assert.equal(stop.status, 0, stop.stdout + stop.stderr)
+  assert.ok(!existsSync(AGENT_PLIST))
+  assert.ok(existsSync(join(RUNTIME, 'patch.mjs')))
+  const restore = spawnSync('node', [join(RUNTIME, 'patch.mjs'), '--restore'], { env: agentEnv(), encoding: 'utf8' })
+  assert.equal(restore.status, 0, restore.stdout + restore.stderr)
+  assert.equal(state().out.trim(), 'needs-patch')
+  // set up again for the next test, from the copy itself
+  const again = spawnSync('node', [join(RUNTIME, 'agent.mjs'), '--install'], { env: agentEnv(), encoding: 'utf8' })
+  assert.equal(again.status, 0, again.stdout + again.stderr)
+  assert.ok(existsSync(AGENT_PLIST))
+})
+
+test('without the agent, the copy still goes in, so the mod can be uninstalled later', () => {
+  const r = spawnSync('/bin/sh', ['-c', `node "$1" --remove --keep-files && node "$1" --copy`, 'sh', join(dirname(PATCH), 'agent.mjs')], { env: agentEnv(), encoding: 'utf8' })
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.ok(!existsSync(AGENT_PLIST))
+  assert.equal(spawnSync('test', ['-x', join(RUNTIME, 'uninstall.sh')]).status, 0)
+})
+
 test('a Claude laid out differently is refused before anything changes', () => {
   assert.equal(patch(['--restore']).status, 0)
   execFileSync('/usr/libexec/PlistBuddy',
@@ -311,6 +337,7 @@ test('the agent leaves a Claude it does not recognise alone and says so once', (
 })
 
 test('if the Node.js the agent was set up with goes missing, it says so once', () => {
+  assert.equal(spawnSync('node', [join(dirname(PATCH), 'agent.mjs'), '--install'], { env: agentEnv() }).status, 0)
   const launcher = readFileSync(LAUNCHER, 'utf8')
   writeFileSync(LAUNCHER, launcher.replace(/^NODE=.*$/m, "NODE='/nowhere/node'"))
   const first = launch()

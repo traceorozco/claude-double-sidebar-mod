@@ -4,14 +4,16 @@
 // patch is left alone after that, so it never retries in a loop.
 //
 //   node agent.mjs            one check (what launchd runs)
-//   node agent.mjs --install  copy what the check needs to its own folder and set up the LaunchAgent there
-//   node agent.mjs --remove   take the LaunchAgent and that copy out
+//   node agent.mjs --install  copy the mod to its own folder and set up the LaunchAgent there
+//   node agent.mjs --copy     only copy the mod there (with --no-agent), so it can still be uninstalled
+//   node agent.mjs --remove   take the LaunchAgent and the copy out; --keep-files leaves the copy and log,
+//                             for uninstall.sh running from that copy
 //
 // The check runs from its own copy in Application Support, not from the cloned repo, so the clone can be
 // moved or deleted. A small launcher in front of it says so, once, if the Node.js it was set up with is gone.
 // It reads nothing but Claude.app and its own state file, and runs nothing but patch.mjs, ps and osascript.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, cpSync, chmodSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, cpSync, chmodSync, realpathSync } from 'node:fs'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,7 +29,7 @@ const STATE = join(USER_HOME, 'Library/Application Support/claude-double-sidebar
 // the check's own copy of the mod, and the launcher launchd runs
 const RUNTIME = join(USER_HOME, 'Library/Application Support/claude-double-sidebar-mod/runtime')
 const LAUNCHER = join(RUNTIME, 'agent.sh')
-const RUNTIME_FILES = ['agent.mjs', 'patch.mjs', 'build.mjs', 'src/sidebar.js', 'vendor/claude-sidebar-icons']
+const RUNTIME_FILES = ['agent.mjs', 'patch.mjs', 'build.mjs', 'uninstall.sh', 'src/sidebar.js', 'vendor/claude-sidebar-icons']
 // the tests set DOUBLE_SIDEBAR_NO_LAUNCHD=1 to set up and remove everything but the launchd registration
 const launchd = process.env.DOUBLE_SIDEBAR_NO_LAUNCHD !== '1'
 const domain = `gui/${process.getuid()}`
@@ -99,15 +101,20 @@ function check() {
 
 const shellQuote = s => `'${s.replace(/'/g, `'\\''`)}'`
 
+// the mod's own copy, refreshed on every install: what the check runs, and an uninstaller that works
+// after the cloned folder is gone. It notes where it came from, for messages.
+function copy() {
+  // run from the copy itself: nothing to copy (compared as real paths, since a home folder can sit behind a link)
+  if (existsSync(RUNTIME) && realpathSync(here) === realpathSync(RUNTIME)) return
+  rmSync(RUNTIME, { recursive: true, force: true })
+  for (const f of RUNTIME_FILES) cpSync(join(here, f), join(RUNTIME, f), { recursive: true })
+  writeFileSync(join(RUNTIME, 'source'), here + '\n')
+}
+
 function install() {
   mkdirSync(dirname(PLIST), { recursive: true })
   mkdirSync(dirname(LOG), { recursive: true })
-  // the check's own copy, refreshed on every install, and where it came from for messages
-  if (here !== RUNTIME) {
-    rmSync(RUNTIME, { recursive: true, force: true })
-    for (const f of RUNTIME_FILES) cpSync(join(here, f), join(RUNTIME, f), { recursive: true })
-    writeFileSync(join(RUNTIME, 'source'), here + '\n')
-  }
+  copy()
   // The launcher: runs the check with this Node.js. If that Node.js is gone (removed, or replaced by an
   // upgrade), it can't run any JavaScript, so it says so itself, once, until the next install.
   const missing = join(RUNTIME, 'node-missing')
@@ -147,12 +154,13 @@ function install() {
   console.log(`Background agent set up: ${PLIST}, running from ${RUNTIME}`)
 }
 
-function remove() {
+function remove(keepFiles) {
   if (launchd) spawnSync('launchctl', ['bootout', `${domain}/${LABEL}`], { stdio: 'ignore' })
-  for (const f of [PLIST, STATE, LOG, RUNTIME]) rmSync(f, { recursive: true, force: true })
+  for (const f of keepFiles ? [PLIST, STATE] : [PLIST, STATE, LOG, RUNTIME]) rmSync(f, { recursive: true, force: true })
   console.log('Background agent removed.')
 }
 
 if (process.argv.includes('--install')) install()
-else if (process.argv.includes('--remove')) remove()
+else if (process.argv.includes('--copy')) copy()
+else if (process.argv.includes('--remove')) remove(process.argv.includes('--keep-files'))
 else check()

@@ -106,7 +106,7 @@ cd ~/code/claude-double-sidebar-mod
 
 `./install.sh --yes` does the same without asking before it quits Claude.
 
-The background agent runs from its own copy in `~/Library/Application Support/claude-double-sidebar-mod`, so you can move or delete the cloned folder afterwards. Keep it if you want to update with `git pull`. If you change your Node.js version, the agent tells you in a notification to run `./install.sh` again.
+The installer keeps its own copy of the mod in `~/Library/Application Support/claude-double-sidebar-mod`, which the background agent and the uninstaller run from, so you can move or delete the cloned folder afterwards. Keep it if you want to update with `git pull`. If you change your Node.js version, the agent tells you in a notification to run `./install.sh` again.
 
 The first time, macOS may ask:
 
@@ -130,8 +130,16 @@ After a Claude update, the background agent puts the sidebar back the next time 
 
 ## Uninstall
 
+From the folder you cloned:
+
 ```bash
 ./uninstall.sh
+```
+
+If you've deleted that folder, the installer kept a copy of the uninstaller:
+
+```bash
+"$HOME/Library/Application Support/claude-double-sidebar-mod/runtime/uninstall.sh"
 ```
 
 This removes the background agent and its log, puts back Claude's own files, signs Claude with your certificate, and removes the sidebar file and the mod's settings folder. It keeps the icon fonts, because section and session names with icons need them: add `--remove-fonts` to remove those too. The **Claude Local** certificate stays in your keychain, where you can delete it in Keychain Access. Add `--yes` to skip the question before it quits Claude. For Claude exactly as Anthropic ships it, with its own signature, download it again from claude.ai/download.

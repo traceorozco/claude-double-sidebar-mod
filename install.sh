@@ -72,4 +72,5 @@ else
   node patch.mjs
   $AGENT && node agent.mjs --install
 fi
-$AGENT || node agent.mjs --remove
+# without the agent, the copy still goes in, so the mod can be uninstalled after the clone is gone
+$AGENT || { node agent.mjs --remove --keep-files; node agent.mjs --copy; }
