@@ -86,13 +86,21 @@ You install it at your own risk:
 
 Needs macOS, [Node.js](https://nodejs.org) 18 or newer, and Apple's command line tools (`xcode-select --install`).
 
-**Ask Claude to install it.** Give Claude Code the link to this repo, in Terminal or in the Claude desktop app, and ask it to install the mod. It reads [AGENTS.md](AGENTS.md), shows you what will change and asks before it starts. Claude quits while it's patched, so in the desktop app the install moves to a Terminal window, where it finishes and reopens Claude.
+Install it from **Claude Code in Terminal**, not from the Claude desktop app. The install quits the desktop app while it patches it, so it has to run from outside it.
+
+**With Claude Code.** Open Terminal, run `claude`, and paste:
+
+```text
+Install the Claude Double Sidebar mod from https://github.com/traceorozco/claude-double-sidebar-mod. Clone it to ~/code/claude-double-sidebar-mod, read AGENTS.md and follow it. Show me what it will change before installing, and only go ahead after I say yes.
+```
+
+Claude Code reads [AGENTS.md](AGENTS.md), shows you every change and asks before it starts. Claude quits, is patched and reopens with the sidebar.
 
 **Or run it yourself** in Terminal:
 
 ```bash
-git clone https://github.com/traceorozco/claude-double-sidebar-mod.git
-cd claude-double-sidebar-mod
+git clone https://github.com/traceorozco/claude-double-sidebar-mod.git ~/code/claude-double-sidebar-mod
+cd ~/code/claude-double-sidebar-mod
 ./install.sh
 ```
 
@@ -111,7 +119,7 @@ The first time, macOS may ask:
 Pull the latest and run the installer again:
 
 ```bash
-cd claude-double-sidebar-mod
+cd ~/code/claude-double-sidebar-mod
 git pull
 ./install.sh
 ```
