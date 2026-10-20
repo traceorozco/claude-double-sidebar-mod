@@ -87,6 +87,8 @@ aside.dframe-sidebar[data-ds-lane]:not([data-ds-lane="home"]) [data-recents-list
 [data-ds-sub] svg { width: 12px; height: 12px; flex: none; transition: transform .15s; }
 [data-ds-sub][aria-expanded="false"] svg { transform: rotate(-90deg); }
 [data-ds-sub] [data-ds-count] { margin-inline-start: auto; font-size: 11px; opacity: .7; }
+[data-ds-sub] [data-ds-subicon] { display: inline-grid; place-items: center; width: 16px; font-size: 13px; margin-inline-end: 2px; }
+[data-ds-sub] [data-ds-subicon][hidden] { display: none; }
 [data-ds-sub-hidden] { display: none !important; }
 [data-ds-menuitem]:hover, [data-ds-menuitem]:focus-visible { background: var(--cds-fill-ghost-hover, rgb(0 0 0 / .05)); }
 [data-ds-menu] > [data-ds-heading] { padding: 6px 8px 2px; font-size: 12px; color: color-mix(in srgb, currentColor 55%, transparent); }
@@ -425,6 +427,17 @@ function decorateSessionRename() {
 // section's view its sessions are ordered under one collapsible heading per category, sessions with no
 // category first. Claude's rows are only reordered (CSS order) and hidden, never moved or rewritten.
 const KEY_COLLAPSED = 'doubleSidebar.collapsedSubsections'
+// each subsection's icon, by name; one not listed shows none. In a section named Work every subsection is a
+// client or employer, so it takes the briefcase
+const SUB_ICONS = {
+  research: 'search', design: 'pen-tool', build: 'shovel', tool: 'wrench', docs: 'notebook', fix: 'bug',
+  plan: 'calendar', output: 'package', housekeeping: 'broom', app: 'beaker', experiment: 'beaker',
+}
+function subIcon(list, name) {
+  const key = name.toLowerCase()
+  const icon = SUB_ICONS[key] || (/^work$/i.test(splitName(list.getAttribute('data-group-label') || '').text) ? 'briefcase' : null)
+  return icon ? ICON_BY_NAME[icon] : null
+}
 // the session's full title: its ··· button names it, and still does while the shown label is shortened
 function rowTitle(row) {
   const more = row.querySelector('button[aria-label^="More options for "]')?.getAttribute('aria-label')
@@ -516,8 +529,8 @@ function groupList(list, expand = false) {
       head.setAttribute('role', 'button')
       head.tabIndex = 0
       head.dataset.name = name
-      head.innerHTML = svg('caret') + '<span></span><span data-ds-count></span>'
-      head.children[1].textContent = name
+      head.innerHTML = svg('caret') + '<span data-ds-subicon></span><span data-ds-subname></span><span data-ds-count></span>'
+      head.querySelector('[data-ds-subname]').textContent = name
       const toggle = () => {
         const set = new Set(load(KEY_COLLAPSED, []))
         set.has(key) ? set.delete(key) : set.add(key)
@@ -529,6 +542,9 @@ function groupList(list, expand = false) {
       list.append(head)
     }
     const shut = collapsed.has(key)
+    const ic = subIcon(list, name) || ''
+    const slot = head.querySelector('[data-ds-subicon]')
+    if (slot && slot.textContent !== ic) { slot.replaceChildren(ic ? glyph(ic) : ''); slot.hidden = !ic }
     head.setAttribute('aria-expanded', String(!shut))
     const count = String(cats.get(name).length)
     if (head.lastChild.textContent !== count) head.lastChild.textContent = count

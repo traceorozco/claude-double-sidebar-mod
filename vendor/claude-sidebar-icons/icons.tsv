@@ -243,3 +243,4 @@ char	codepoint	name	build key	source
 󰃱	U+F00F1	store	icon-store	icons/lucide/store.svg
 󰃲	U+F00F2	package-open	icon-package-open	icons/lucide/package-open.svg
 󰃳	U+F00F3	quote	icon-quote	icons/lucide/quote.svg
+󰃴	U+F00F4	shovel	icon-shovel	icons/lucide/shovel.svg

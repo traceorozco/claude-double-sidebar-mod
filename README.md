@@ -10,7 +10,7 @@ A double sidebar for the Code tab in Claude for Desktop on macOS, drawn inside C
 - Click a section and the sidebar shows only that section's sessions. Home shows everything.
 - Right-click a section on the rail for New session, Change icon and Claude's own section options.
 - The + at the foot of the rail makes a new section, with an icon picked in Claude's New section dialog.
-- Icons on sections and sessions: rename one and pick from 244 line icons, with search.
+- Icons on sections and sessions: rename one and pick from 245 line icons, with search.
 - Subsections: name a session `research / woodblocks` and it sits under a RESEARCH heading in its section, shown without the prefix. A toggle on the rail switches between Show by subsection and Show all.
 - Close Claude's sidebar and the rail stays, with your account at its foot.
 

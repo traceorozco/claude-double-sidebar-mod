@@ -1,15 +1,15 @@
 # Claude sidebar icons
 
-The source for the line-icon font the [Claude Double Sidebar plugin](https://github.com/traceorozco/claude-double-sidebar-plugin) installs: 244 icons on private-use characters (U+F0000 to U+F00F3), drawn by Claude Desktop's own sidebar.
+The source for the line-icon font the [Claude Double Sidebar plugin](https://github.com/traceorozco/claude-double-sidebar-plugin) installs: 245 icons on private-use characters (U+F0000 to U+F00F4), drawn by Claude Desktop's own sidebar.
 
-![All 244 icons, colour version](previews/colour.png)
+![All 245 icons, colour version](previews/colour.png)
 
 ## Two versions
 
 - **Colour** (`fonts/colour/`): each icon's line in the text colour, with one part filled in terracotta at 35%. This is what the plugin ships.
 - **Mono** (`fonts/mono/`): the same lines, no fill.
 
-![All 244 icons, mono version](previews/mono.png)
+![All 245 icons, mono version](previews/mono.png)
 
 Both use the same characters, so a section or session name keeps its icon whichever is installed.
 
