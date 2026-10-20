@@ -21,6 +21,7 @@ const UI = {
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  caret: '<path d="m6 9 6 6 6-6"/>',
   palette: '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
 }
 const svg = name => `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${UI[name]}</svg>`
@@ -53,6 +54,12 @@ aside.dframe-sidebar[data-ds] > .df-titlebar { box-shadow: inset 0 -1px 0 var(--
 [data-ds-rail] button { all: unset; box-sizing: border-box; flex: none; width: 32px; height: 32px; border-radius: 8px;
   display: grid; place-items: center; cursor: default; color: color-mix(in srgb, currentColor 72%, transparent); font-size: 17px; }
 [data-ds-rail] button svg { width: 15px; height: 15px; }
+/* the new-section button: Claude's own New circle (its colours and hover darkening come from Claude's df-new-circle rules) */
+[data-ds-rail] .df-new-circle { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: var(--cds-text-secondary, currentColor); }
+[data-ds-rail] button:hover .df-new-circle { color: var(--cds-text-primary, currentColor); }
+[data-ds-rail] .df-new-circle svg { width: 13px; height: 13px; stroke-width: 2.2; }
+/* sections are categories: their names in capitals, a pixel smaller than Claude's group labels */
+aside.dframe-sidebar [data-group-section^="custom-"] [data-sidebar-group-label] [data-group-name] { text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
 [data-ds-rail] button:hover { background: var(--ds-hover); color: currentColor; }
 [data-ds-rail] button[aria-pressed="true"] { background: var(--ds-on); color: currentColor; }
 [data-ds-rail] button:focus-visible { outline: 2px solid color-mix(in srgb, currentColor 40%, transparent); outline-offset: 1px; }
@@ -61,6 +68,14 @@ aside.dframe-sidebar[data-ds-lane]:not([data-ds-lane="home"]) [data-testid="nav-
 aside.dframe-sidebar[data-ds-lane]:not([data-ds-lane="home"]) [data-pinned-list] { display: none !important; }
 /* Recents is the list that stretches the sidebar to the window's foot: kept in place, emptied */
 aside.dframe-sidebar[data-ds-lane]:not([data-ds-lane="home"]) [data-recents-list] > * { display: none !important; }
+/* subsections: a section's sessions grouped by the category in their titles ("category / topic") */
+[data-ds-sub] { display: flex; align-items: center; gap: 4px; margin: 6px 0 1px; padding: 0 8px 0 10px; height: 24px; border-radius: 6px;
+  font-size: 12px; color: var(--cds-text-muted, #898781); cursor: default; user-select: none; }
+[data-ds-sub]:hover { color: var(--cds-text-secondary, #52514e); background: var(--ds-hover); }
+[data-ds-sub] svg { width: 12px; height: 12px; flex: none; transition: transform .15s; }
+[data-ds-sub][aria-expanded="false"] svg { transform: rotate(-90deg); }
+[data-ds-sub] [data-ds-count] { margin-inline-start: auto; font-size: 11px; opacity: .7; }
+[data-ds-sub-hidden] { display: none !important; }
 [data-ds-tip] { position: fixed; z-index: 2147483001; pointer-events: none; padding: 4px 8px; border-radius: 6px;
   background: var(--ds-tip, #1f1e1d); color: var(--ds-tip-ink, #fff); font-family: inherit; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; }
 [data-ds-menu] { position: fixed; z-index: 2147483000; min-width: 180px; padding: 4px; border-radius: 11px; font-family: inherit; font-size: 14px;
@@ -387,6 +402,80 @@ function decorateSessionRename() {
   }
 }
 
+// --- subsections. A session titled "category / topic" (an icon may lead) belongs to that category. In a
+// section's view its sessions are ordered under one collapsible heading per category, sessions with no
+// category first. Claude's rows are only reordered (CSS order) and hidden, never moved or rewritten.
+const KEY_COLLAPSED = 'doubleSidebar.collapsedSubsections'
+const rowTitle = row => (row.querySelector('[data-row-label]')?.innerText || '').split('\n')[0].trim()
+function categoryOf(title) {
+  const { text } = splitName(title)
+  const i = text.indexOf(' / ')
+  return i > 0 ? text.slice(0, i).trim() : null
+}
+const flexItems = list => [...list.children].flatMap(c => getComputedStyle(c).display === 'contents' ? [...c.children] : [c])
+function clearSubsections(list) {
+  if (!list.hasAttribute('data-ds-grouped')) return
+  list.removeAttribute('data-ds-grouped')
+  list.querySelectorAll('[data-ds-sub]').forEach(h => h.remove())
+  for (const el of list.querySelectorAll('[data-ds-sub-hidden]')) el.removeAttribute('data-ds-sub-hidden')
+  for (const el of flexItems(list)) el.style.removeProperty('order')
+}
+function groupSubsections(lane) {
+  for (const l of document.querySelectorAll('aside.dframe-sidebar [data-group-list]')) if (l.getAttribute('data-group-list') !== lane) clearSubsections(l)
+  if (lane === 'home') return
+  const list = groupEl(lane)
+  if (!list) return
+  // every session of the section, not the first few: Claude's Show more, pressed once per visit
+  if (!list.hasAttribute('data-ds-expanded')) {
+    const more = list.querySelector('[data-row-key^="label:showmore:"] button')
+    if (more) { list.setAttribute('data-ds-expanded', ''); more.click(); return }
+  }
+  const items = flexItems(list).filter(el => !el.matches('[data-ds-sub]'))
+  // sessions, not the heading or Claude's Show more / Show less row (their keys start with label:)
+  const rows = items.filter(el => el.matches('[data-row-key]') && !el.matches('[data-row-key^="label:"]'))
+  const cats = new Map()
+  for (const r of rows) { const c = categoryOf(rowTitle(r)); if (c) (cats.get(c) || cats.set(c, []).get(c)).push(r) }
+  if (!cats.size) { clearSubsections(list); return }
+  list.setAttribute('data-ds-grouped', '')
+  const collapsed = new Set(load(KEY_COLLAPSED, []))
+  const setOrder = (el, o) => { if (el.style.order !== String(o)) el.style.order = String(o) }
+  const heading = el => el.matches('[data-row-key^="label:"]') && !el.matches('[data-row-key^="label:showmore:"]')
+  for (const el of items) setOrder(el, heading(el) ? -1 : rows.includes(el) ? 0 : 100000)
+  let o = 10
+  const names = [...cats.keys()].sort((a, b) => a.localeCompare(b))
+  for (const name of names) {
+    const key = `${lane}\n${name}`
+    let head = [...list.querySelectorAll(':scope > [data-ds-sub]')].find(h => h.dataset.name === name)
+    if (!head) {
+      head = document.createElement('div')
+      head.setAttribute('data-ds-sub', '')
+      head.setAttribute('role', 'button')
+      head.tabIndex = 0
+      head.dataset.name = name
+      head.innerHTML = svg('caret') + '<span></span><span data-ds-count></span>'
+      head.children[1].textContent = name
+      const toggle = () => {
+        const set = new Set(load(KEY_COLLAPSED, []))
+        set.has(key) ? set.delete(key) : set.add(key)
+        save(KEY_COLLAPSED, [...set])
+        groupSubsections(lane)
+      }
+      head.onclick = toggle
+      head.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }
+      list.append(head)
+    }
+    const shut = collapsed.has(key)
+    head.setAttribute('aria-expanded', String(!shut))
+    const count = String(cats.get(name).length)
+    if (head.lastChild.textContent !== count) head.lastChild.textContent = count
+    setOrder(head, o)
+    for (const r of cats.get(name)) { setOrder(r, o + 1); r.toggleAttribute('data-ds-sub-hidden', shut) }
+    o += 10
+  }
+  for (const h of list.querySelectorAll(':scope > [data-ds-sub]')) if (!cats.has(h.dataset.name)) h.remove()
+  for (const r of rows) if (!categoryOf(rowTitle(r))) r.removeAttribute('data-ds-sub-hidden')
+}
+
 function render(aside) {
   // the rail lives on the window frame, not in the sidebar: closed, Claude shrinks the sidebar to its toolbar
   const host = aside.closest('.dframe-root') || aside.parentElement
@@ -434,7 +523,14 @@ function render(aside) {
       })
     }
   }
-  if (list.length) button('New section', 'plus', newSection)
+  if (list.length) {
+    rail.append(document.createElement('hr'))
+    const plus = button('New section', 'plus', newSection)
+    const circle = document.createElement('span')
+    circle.className = 'df-new-circle'
+    circle.innerHTML = svg('plus')
+    plus.replaceChildren(circle)
+  }
   applyLane(aside, lane)
 }
 
@@ -449,6 +545,7 @@ function start() {
     if (aside) render(aside)
     decorateSectionDialog()
     decorateRename()
+    if (aside) groupSubsections(aside.getAttribute('data-ds-lane') || 'home')
     decorateSessionRename()
   }
   new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(tick) } })
