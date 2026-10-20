@@ -27,16 +27,18 @@ A double sidebar for the Claude desktop app on macOS, in Chat, Cowork and Code, 
 - Subsections: name a session `research / woodblocks` and it sits under a RESEARCH heading in its section, shown without the prefix. A toggle on the rail switches between Show by subsection and Show all.
 - Close Claude's sidebar and the rail stays, with your account at its foot.
 
+![Sidebar closed: the rail stays, with your account at its foot](docs/screenshots/sidebar-closed.webp)
+
+<p align="center"><em>Sidebar closed: the rail stays, with your account at its foot.</em></p>
+
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/sidebar-closed.webp" alt="Sidebar closed: the rail stays, with the account avatar at its foot"></td>
-<td width="25%"><img src="docs/screenshots/icon-picker.webp" alt="The icon picker, with search"></td>
-<td width="25%"><img src="docs/screenshots/subsection-toggle.png" alt="The toggle that turns subsections on and off"></td>
+<td width="50%"><img src="docs/screenshots/icon-picker.webp" alt="The icon picker, with search"></td>
+<td width="50%"><img src="docs/screenshots/subsection-toggle.png" alt="The toggle that turns subsections on and off"></td>
 </tr>
 <tr>
-<td>Sidebar closed: the rail stays, with your account at its foot.</td>
 <td>Pick an icon for a section or session, with search.</td>
-<td>Turn subsection grouping on or off.</td>
+<td>Switch between Show by subsection and Show all.</td>
 </tr>
 </table>
 
