@@ -46,10 +46,30 @@ const notify = text => {
   if (process.env.DOUBLE_SIDEBAR_NOTIFY !== 'print')
     spawnSync('osascript', ['-e', `display notification ${JSON.stringify(text)} with title "Claude Double Sidebar"`])
 }
+// The tests set DOUBLE_SIDEBAR_TEST=1: no dialog (DOUBLE_SIDEBAR_ANSWER gives the answer), and quitting and
+// opening Claude are pretended. DOUBLE_SIDEBAR_FAKE_RUNNING=1 pretends Claude is open until that pretend quit.
+const testing = process.env.DOUBLE_SIDEBAR_TEST === '1'
+let fakeRunning = process.env.DOUBLE_SIDEBAR_FAKE_RUNNING === '1'
 // the same check as patch.mjs: Claude, its Electron helpers or Squirrel, not what Chrome starts from Contents/Helpers
-const running = () => process.env.DOUBLE_SIDEBAR_FAKE_RUNNING === '1' ||
+const running = () => fakeRunning ||
   execFileSync('ps', ['-axo', 'comm=']).toString().split('\n').some(l => [`${APP}/Contents/MacOS/`, `${APP}/Contents/Frameworks/`].some(p => l.startsWith(p)))
-const patch = args => spawnSync(process.execPath, [join(here, 'patch.mjs'), ...args], { encoding: 'utf8' })
+const appleScriptText = t => JSON.stringify(t)
+// a dialog: true for "Restart Claude", false for "Later" or no answer within an hour
+const askRestart = text => {
+  if (testing) return process.env.DOUBLE_SIDEBAR_ANSWER === 'restart'
+  const r = spawnSync('osascript', ['-e', `display dialog ${appleScriptText(text)} buttons {"Later", "Restart Claude"} default button "Restart Claude" with title "Claude Double Sidebar" giving up after 3600`], { encoding: 'utf8' })
+  return /button returned:Restart Claude/.test(r.stdout) && !/gave up:true/.test(r.stdout)
+}
+// quits Claude the way ⌘Q does, and waits up to a minute for it to close
+const quitClaude = () => {
+  if (testing) { fakeRunning = false; return true }
+  spawnSync('osascript', ['-e', `tell application ${appleScriptText(APP)} to quit`])
+  for (let i = 0; i < 60 && running(); i++) execFileSync('sleep', ['1'])
+  return !running()
+}
+const openClaude = () => { if (!testing) spawnSync('open', ['-a', APP]) }
+const patch = args => spawnSync(process.execPath, [join(here, 'patch.mjs'), ...args],
+  { encoding: 'utf8', env: { ...process.env, DOUBLE_SIDEBAR_FAKE_RUNNING: fakeRunning ? '1' : '' } })
 
 function check() {
   const fingerprint = plistValue('ElectronAsarIntegrity:Resources/app.asar:hash', join(APP, 'Contents/Info.plist'))
@@ -76,7 +96,19 @@ function check() {
   if (s.build.state === 'refused')
     return tell('refused', `Claude ${version} is laid out in a way this version of the sidebar mod doesn't know, so the sidebar is off. Claude works as normal. Update the mod to bring the sidebar back.`)
   if (s.build.state === 'failed') return
-  if (running()) return tell('waiting', `Claude updated to ${version}. Your sidebar comes back the next time you quit Claude.`)
+  // Claude reopens straight after an update, so it's usually open here. Offer once to restart it now; without
+  // a yes, the sidebar comes back the next time Claude is quit.
+  let restarting = false
+  if (running()) {
+    if (s.build.told) return
+    s.build.told = 'asked'
+    save(s)
+    if (!askRestart(`Claude updated to ${version}, so the double sidebar is off. Restart Claude now to put it back? Claude closes, is patched, and reopens in about a minute. Anything running in Claude stops.`))
+      return tell('waiting', `Your sidebar comes back the next time you quit Claude.`)
+    log('Restarting Claude to patch it')
+    if (!quitClaude()) return tell('waiting', `Claude didn't close, so the sidebar comes back the next time you quit Claude.`)
+    restarting = true
+  }
 
   log(`Patching Claude ${version}`)
   const r = patch([])
@@ -86,6 +118,7 @@ function check() {
     delete s.build
     save(s)
     log(r.stdout.trim())
+    if (restarting) { openClaude(); return notify(`Sidebar restored for Claude ${version}.`) }
     return notify(`Sidebar restored for Claude ${version}. It's there the next time you open Claude.`)
   }
   // opened again before the swap: Claude is unchanged, and the next check tries again
@@ -93,6 +126,7 @@ function check() {
   s.build.state = 'failed'
   s.build.reason = (r.stderr || r.stdout).trim().split('\n').filter(Boolean).slice(-2).join(' ')
   save(s)
+  if (restarting) openClaude()
   log(`Patch failed: ${s.build.reason}`)
   let source = ''
   try { source = readFileSync(join(here, 'source'), 'utf8').trim() } catch {}

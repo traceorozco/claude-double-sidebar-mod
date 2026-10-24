@@ -37,7 +37,7 @@ const state = () => patch(['--state'])
 // one check by the background agent, with notifications printed instead of shown
 const agent = (env = {}) => {
   const r = spawnSync('node', [AGENT], {
-    env: { ...process.env, CLAUDE_APP: APP, DOUBLE_SIDEBAR_HOME: HOME, DOUBLE_SIDEBAR_NOTIFY: 'print', DOUBLE_SIDEBAR_FAIL_AT: '', DOUBLE_SIDEBAR_FAKE_RUNNING: '', ...env },
+    env: { ...process.env, CLAUDE_APP: APP, DOUBLE_SIDEBAR_HOME: HOME, DOUBLE_SIDEBAR_NOTIFY: 'print', DOUBLE_SIDEBAR_TEST: '1', DOUBLE_SIDEBAR_ANSWER: '', DOUBLE_SIDEBAR_FAIL_AT: '', DOUBLE_SIDEBAR_FAKE_RUNNING: '', ...env },
     encoding: 'utf8',
   })
   return { status: r.status, out: r.stdout + r.stderr, notes: (r.stdout.match(/notify: .*/g) || []).map(l => l.slice(8)) }
@@ -228,6 +228,26 @@ test('after an update, the agent waits while Claude is open and says so once', (
   assert.equal(state().out.trim(), 'needs-patch')
 })
 
+test('after an update, a yes to the restart offer quits Claude, patches it and reopens it', () => {
+  // Claude is still on the unpatched build from the last test: the agent forgets it already asked, as it
+  // would for a new update
+  const stateFile = join(HOME, 'Library/Application Support/claude-double-sidebar-mod/agent.json')
+  const saved = JSON.parse(readFileSync(stateFile, 'utf8'))
+  delete saved.build
+  writeFileSync(stateFile, JSON.stringify(saved))
+  const r = agent({ DOUBLE_SIDEBAR_FAKE_RUNNING: '1', DOUBLE_SIDEBAR_ANSWER: 'restart' })
+  assert.equal(r.status, 0, r.out)
+  assert.match(r.out, /Restarting Claude to patch it/)
+  assert.equal(r.notes.length, 1, r.out)
+  assert.match(r.notes[0], /Sidebar restored/)
+  assert.equal(state().out.trim(), 'installed')
+  assert.ok(verified())
+  // and asks nothing more for this build
+  assert.deepEqual(agent({ DOUBLE_SIDEBAR_FAKE_RUNNING: '1', DOUBLE_SIDEBAR_ANSWER: 'restart' }).notes, [])
+  assert.equal(patch(['--restore']).status, 0) // and once more, for the next test
+  assert.equal(agent({ DOUBLE_SIDEBAR_FAKE_RUNNING: '1' }).status, 0)
+})
+
 test('once Claude is closed, the agent patches it and says so once', () => {
   const r = agent()
   assert.equal(r.status, 0, r.out)
@@ -242,7 +262,7 @@ const MOD = join(HOME, 'Library/Application Support/claude-double-sidebar-mod')
 const RUNTIME = join(MOD, 'runtime')
 const LAUNCHER = join(RUNTIME, 'agent.sh')
 const AGENT_PLIST = join(HOME, 'Library/LaunchAgents/local.claude-double-sidebar.plist')
-const agentEnv = (env = {}) => ({ ...process.env, CLAUDE_APP: APP, DOUBLE_SIDEBAR_HOME: HOME, DOUBLE_SIDEBAR_NOTIFY: 'print',
+const agentEnv = (env = {}) => ({ ...process.env, CLAUDE_APP: APP, DOUBLE_SIDEBAR_HOME: HOME, DOUBLE_SIDEBAR_NOTIFY: 'print', DOUBLE_SIDEBAR_TEST: '1', DOUBLE_SIDEBAR_ANSWER: '',
   DOUBLE_SIDEBAR_NO_LAUNCHD: '1', DOUBLE_SIDEBAR_FAIL_AT: '', DOUBLE_SIDEBAR_FAKE_RUNNING: '', ...env })
 // what launchd would run: the launcher in the agent's own copy
 const launch = (env = {}) => {
