@@ -38,11 +38,12 @@ const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catc
 const STYLE = `
 /* room for the rail as padding, not margin: the body clips what leaves its box, and the footer below
    reaches back over the rail to the window's edge */
-aside.dframe-sidebar[data-ds] > .dframe-sidebar-body { padding-inline-start: calc(${RAIL_W}px + 0.5rem); }
+/* !important: Claude 3's panels look sets the body's padding with a more specific rule */
+aside.dframe-sidebar[data-ds] > .dframe-sidebar-body { padding-inline-start: calc(${RAIL_W}px + 0.5rem) !important; }
 /* one rule under the header, across the rail and the sidebar */
 aside.dframe-sidebar[data-ds] > .df-titlebar { box-shadow: inset 0 -1px 0 var(--ds-line); }
 /* the footer (account, settings) runs to the window's left edge like the header; the rail stops above it */
-aside.dframe-sidebar[data-ds] > .dframe-sidebar-body .df-bottom-tray { margin-inline-start: -${RAIL_W}px; }
+aside.dframe-sidebar[data-ds] > .dframe-sidebar-body .df-bottom-tray { margin-inline-start: -${RAIL_W}px !important; }
 .dframe-root[data-ds-host]:not([data-ds-closed]) > [data-ds-rail] { bottom: var(--ds-foot, 0px); }
 .dframe-root[data-ds-closed] > main.dframe-content { left: ${RAIL_W}px !important; }
 .dframe-root[data-ds-closed] > [data-ds-rail] { border-top: 1px solid var(--ds-line); }
