@@ -7,6 +7,7 @@
 **Your Claude sidebar, sorted into sections, with a rail to move between them.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
+[![Version: 4.29.0](https://img.shields.io/badge/version-4.29.0-black.svg)](#versions)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-black.svg)](#install)
 [![Icons: 245](https://img.shields.io/badge/icons-245-black.svg)](https://github.com/traceorozco/claude-sidebar-icons)
 [![Unofficial](https://img.shields.io/badge/unofficial-not%20by%20Anthropic-lightgrey.svg)](#before-you-install)
@@ -68,9 +69,13 @@ Claude's sidebar is part of the claude.ai page the app loads. The patch adds a s
 
 Claude checks its files against a fingerprint in its signed settings, so the patch updates the fingerprint and signs Claude again with a certificate on your Mac called **Claude Local**, which the installer makes the first time. The same certificate every time keeps macOS's keychain and privacy permissions for Claude in place across installs. Claude is signed so that Anthropic's signature also satisfies it, which leaves Claude's own updater able to install Anthropic's updates.
 
-The patch works on a copy of Claude.app beside it, signs and checks the copy, then swaps it in. If any step fails, Claude is left as it was. It checks first that Claude is laid out the way it expects, and stops before changing anything if not. It has been used on Claude 2.42304.2.
+The patch works on a copy of Claude.app beside it, signs and checks the copy, then swaps it in. If any step fails, Claude is left as it was. It checks first that Claude is laid out the way it expects, and stops before changing anything if not. Claude 4 runs on Electron 44, which also keeps a digest of that fingerprint inside its Electron Framework, so on Claude 4 the patch updates the digest too and signs the framework and Claude's helper apps again with the same certificate.
 
 A Claude update replaces the patched app, so the sidebar goes until Claude is patched again. A small background agent does that: it notices the update, waits until you next quit Claude, patches it, and tells you in a notification. If the new Claude isn't laid out the way the mod expects, the agent leaves it alone and tells you the sidebar is off until the mod is updated. It deals with each Claude build once, so it never retries in a loop.
+
+## Versions
+
+The mod's version matches the Claude version it was last made and checked for, so version 4.29.0 is for Claude 4.29.0. A newer Claude usually still works, and the background agent patches it again after each update. If a Claude update breaks the sidebar, the next version of the mod carries that Claude's version.
 
 ## Before you install
 

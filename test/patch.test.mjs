@@ -192,12 +192,31 @@ test('Claude is signed so either the local certificate or Anthropic satisfies it
   const req = requirement()
   assert.match(req, new RegExp(`certificate leaf = H"${LEAF}"`))
   assert.match(req, /Q6L2SF6YDW/)
-  // Electron's framework inside Claude still carries Anthropic's signature: it passes the same rules,
-  // with its own identifier in place of Claude's, the way an update from Anthropic would
+  // Electron's framework inside Claude passes the same rules, with its own identifier in place of Claude's
   const forElectron = req.replace(/identifier "[^"]+"/, 'identifier "com.github.Electron.framework"')
   assert.equal(spawnSync('codesign', ['--verify', `-R=${forElectron}`, ELECTRON()]).status, 0)
-  // and the rules before this change turned it away
-  assert.notEqual(spawnSync('codesign', ['--verify', `-R=certificate leaf = H"${LEAF}"`, ELECTRON()]).status, 0)
+  // Before Electron 44 it still carries Anthropic's signature, the way an update from Anthropic would, and
+  // the rules before this change turned it away. From Electron 44 its integrity digest changes with the
+  // patch, so the patch signs it again with the local certificate.
+  const local = spawnSync('codesign', ['--verify', `-R=certificate leaf = H"${LEAF}"`, ELECTRON()]).status === 0
+  assert.equal(local, hasIntegrityDigest())
+})
+
+// Electron 44 and later keep a digest of Info.plist's asar fingerprints in the framework, marked used
+function hasIntegrityDigest() {
+  const bin = readFileSync(join(ELECTRON(), 'Versions/A/Electron Framework'))
+  const at = bin.indexOf('AGbevlPCksUGKNL8TSn7wGmJEuJsXb2A')
+  return at >= 0 && bin[at + 32] === 1
+}
+
+test('Claude starts: the framework digest matches Info.plist after patching', { skip: !existsSync(join(APP, 'Contents/Info.plist')) }, () => {
+  if (!hasIntegrityDigest()) return
+  const all = JSON.parse(execFileSync('plutil', ['-extract', 'ElectronAsarIntegrity', 'json', '-o', '-', join(APP, 'Contents/Info.plist')]))
+  const h = createHash('sha256')
+  for (const k of Object.keys(all).sort()) h.update(k).update(all[k].algorithm).update(all[k].hash)
+  const bin = readFileSync(join(ELECTRON(), 'Versions/A/Electron Framework'))
+  const at = bin.indexOf('AGbevlPCksUGKNL8TSn7wGmJEuJsXb2A') + 34
+  assert.equal(bin.subarray(at, at + 32).toString('hex'), h.digest('hex'))
 })
 
 test('an install signed by the earlier rules is patched again', () => {

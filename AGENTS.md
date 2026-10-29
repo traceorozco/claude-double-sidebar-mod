@@ -13,6 +13,7 @@ Run `./install.sh --plan`. It lists every change for this Mac and changes nothin
   - saves the original `Contents/Resources/app.asar` as `app.asar.original`
   - adds a loader to the top of `.vite/build/index.js` inside `app.asar`. On each claude.ai page load it reads the sidebar file and runs it in that page
   - updates the `app.asar` fingerprint in `Contents/Info.plist`
+  - on Claude 4 and later (Electron 44), updates the matching integrity digest inside `Contents/Frameworks/Electron Framework.framework`, and signs that framework and Claude's helper apps (`Contents/Frameworks/Claude Helper*.app`) again with the local certificate, without hardened runtime, as Claude itself is signed
   - moves `Contents/embedded.provisionprofile` aside and drops Anthropic-only entitlements
   - creates a self-signed code-signing certificate named "Claude Local" in the login keychain if there isn't one, and re-signs Claude with it. The signature's designated requirement accepts either that certificate or Anthropic's Developer ID (team Q6L2SF6YDW), so Claude's own updater can still install Anthropic's updates
 

@@ -69,14 +69,19 @@ function node(header, path) {
 const bytes = (buf, dataStart, n) => buf.subarray(dataStart + Number(n.offset), dataStart + Number(n.offset) + n.size)
 
 // Rebuilds the archive with some files' bytes replaced; every other entry keeps its flags (unpacked,
-// executable, links) and its integrity, and only offsets move.
+// executable, links) and its integrity, and only offsets move. Entries that share their bytes in the
+// archive (identical files stored once, as Claude 4 does) still share them: Electron 44 won't start
+// from an archive where they're copied out separately.
 function writeAsar(buf, header, dataStart, replace) {
   const chunks = []
   let offset = 0
+  const shared = new Map()
   const visit = n => {
     for (const v of Object.values(n.files)) {
       if (v.files) { visit(v); continue }
       if (v.link || v.unpacked) continue
+      if (!replace.has(v) && shared.has(v.offset)) { v.offset = shared.get(v.offset); continue }
+      const from = v.offset
       const b = replace.get(v) ?? bytes(buf, dataStart, v)
       if (replace.has(v)) {
         const blockSize = 4 * 1024 * 1024, blocks = []
@@ -86,6 +91,7 @@ function writeAsar(buf, header, dataStart, replace) {
         v.integrity = { algorithm: 'SHA256', hash: sha(b), blockSize, blocks }
       }
       v.offset = String(offset)
+      if (!replace.has(v)) shared.set(from, v.offset)
       offset += b.length
       chunks.push(b)
     }
@@ -123,9 +129,12 @@ function inspect(app) {
   try { fingerprint = plistBuddy('Print :ElectronAsarIntegrity:Resources/app.asar:hash', join(app, PLIST)) } catch {}
   if (!fingerprint) unlike(`its Info.plist has no app.asar fingerprint`)
   if (fingerprint !== asar.headerHash) unlike(`its app.asar fingerprint doesn't match the archive`)
-  // patched: the loader, and signing that also accepts Anthropic's updates (installs before it lack that)
+  const slot = digestSlot(app)
+  if (slot && slot.version !== 1) unlike(`its Electron Framework keeps an integrity digest of a kind this mod doesn't know`)
+  // patched: the loader, signing that also accepts Anthropic's updates (installs before it lack that), and
+  // a framework digest in step with Info.plist (installs before Electron 44 support lack that)
   const loader = bytes(buf, asar.dataStart, entry).toString().startsWith(LOADER)
-  return { version, patched: loader && acceptsAnthropic(app) }
+  return { version, patched: loader && acceptsAnthropic(app) && digestMatches(app) }
 }
 
 function acceptsAnthropic(app) {
@@ -161,8 +170,10 @@ function ensureCertificate() {
       '-keyout', join(dir, 'key.pem'), '-out', join(dir, 'cert.pem')])
     // a throwaway password: macOS will not import a .p12 without one
     const pass = createHash('sha256').update(String(Math.random()) + Date.now()).digest('hex').slice(0, 24)
+    // macOS's security import only reads the older PKCS12 algorithms, which OpenSSL 3 no longer defaults to
     run('openssl', ['pkcs12', '-export', '-inkey', join(dir, 'key.pem'), '-in', join(dir, 'cert.pem'),
-      '-out', join(dir, 'cert.p12'), '-name', CERT, '-passout', `pass:${pass}`])
+      '-out', join(dir, 'cert.p12'), '-name', CERT, '-passout', `pass:${pass}`,
+      '-keypbe', 'PBE-SHA1-3DES', '-certpbe', 'PBE-SHA1-3DES', '-macalg', 'sha1'])
     run('security', ['import', join(dir, 'cert.p12'), '-k', join(homedir(), 'Library/Keychains/login.keychain-db'),
       '-P', pass, '-T', '/usr/bin/codesign'])
   } catch (e) {
@@ -197,6 +208,15 @@ function resign(app) {
   }
   try {
     failAt('sign')
+    // a changed framework digest breaks the framework's own signature: sign it again, and its helpers with
+    // it, since macOS only lets a helper load a framework from the same signer. Without hardened runtime,
+    // like Claude itself here, as that check refuses a local certificate's missing team.
+    if (digestSlot(app)) {
+      run('codesign', ['--force', '--sign', CERT, '--preserve-metadata=identifier', join(app, FRAMEWORK)])
+      for (const h of readdirSync(join(app, 'Contents/Frameworks')).filter(f => f.endsWith('.app'))) {
+        run('codesign', ['--force', '--sign', CERT, '--preserve-metadata=identifier,entitlements', join(app, 'Contents/Frameworks', h)])
+      }
+    }
     run('codesign', ['--force', '--sign', CERT, '--entitlements', ents, `-r=${rules(app)}`, app])
   } finally {
     rmSync(ents, { force: true })
@@ -204,7 +224,35 @@ function resign(app) {
   run('codesign', ['--verify', '--strict', app])
 }
 
-const setIntegrity = (app, hash) => plistBuddy(`Set :ElectronAsarIntegrity:Resources/app.asar:hash ${hash}`, join(app, PLIST))
+// Electron 44 and later also keep a digest of Info.plist's ElectronAsarIntegrity inside Electron Framework,
+// and won't start when the two disagree. A Claude whose framework carries no digest skips all of this.
+const FRAMEWORK = 'Contents/Frameworks/Electron Framework.framework'
+const FRAMEWORK_BIN = FRAMEWORK + '/Versions/A/Electron Framework'
+const DIGEST_SENTINEL = Buffer.from('AGbevlPCksUGKNL8TSn7wGmJEuJsXb2A')
+function digestSlot(app) {
+  const bin = join(app, FRAMEWORK_BIN)
+  if (!existsSync(bin)) return null
+  const buf = readFileSync(bin)
+  const at = buf.indexOf(DIGEST_SENTINEL)
+  if (at < 0 || buf[at + 32] !== 1) return null
+  return { bin, buf, version: buf[at + 33], at: at + 34 }
+}
+// what Electron hashes: each archive's path, algorithm and hash, in path order
+function integrityDigest(app) {
+  const all = JSON.parse(run('plutil', ['-extract', 'ElectronAsarIntegrity', 'json', '-o', '-', join(app, PLIST)]))
+  const h = createHash('sha256')
+  for (const k of Object.keys(all).sort()) h.update(k).update(all[k].algorithm).update(all[k].hash)
+  return h.digest()
+}
+const digestMatches = app => { const s = digestSlot(app); return !s || integrityDigest(app).equals(s.buf.subarray(s.at, s.at + 32)) }
+
+function setIntegrity(app, hash) {
+  plistBuddy(`Set :ElectronAsarIntegrity:Resources/app.asar:hash ${hash}`, join(app, PLIST))
+  const slot = digestSlot(app)
+  if (!slot) return
+  integrityDigest(app).copy(slot.buf, slot.at)
+  writeFileSync(slot.bin, slot.buf)
+}
 
 // a run stopped between the two renames of a swap leaves Claude in OLD: put it back, and clear leftovers
 function recover() {
@@ -353,6 +401,7 @@ function plan() {
     lines.push(`  - saves Claude's original app.asar in the copy as ${BACKUP}`)
     lines.push(`  - adds a loader to ${ENTRY} inside ${ASAR}: on each claude.ai page load it reads the sidebar file and runs it in the page`)
     lines.push(`  - updates the app.asar fingerprint in ${PLIST}`)
+    if (digestSlot(APP)) lines.push(`  - updates the matching integrity digest in Electron Framework, and signs the framework and Claude's helper apps again`)
     if (profile) lines.push(`  - moves Claude's provisioning profile to ${join(SAVED, 'embedded.provisionprofile')}`)
     lines.push(`  - removes Anthropic-only entitlements (application identifier, team identifier, associated domains, keychain access groups) from Claude's signature`)
     lines.push(hasCertificate() ? `  - signs the copy with the "${CERT}" certificate already in your login keychain`
